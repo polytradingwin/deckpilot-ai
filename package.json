@@ -10,7 +10,9 @@
     "build": "tsc --noEmit && vite build",
     "doctor:openai": "tsx scripts/doctor-openai.ts",
     "verify:api": "tsx scripts/verify-api.ts",
+    "verify:worker": "tsx scripts/verify-long-worker.ts",
     "preview": "vite preview --host 127.0.0.1",
+    "worker": "tsx server/worker.ts",
     "server": "tsx server/index.ts",
     "start": "tsx server/index.ts"
   },

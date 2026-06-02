@@ -81,6 +81,16 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
+  if (slide.layout === "agenda") {
+    renderAgenda(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "section") {
+    renderSection(page, slide, accent);
+    return;
+  }
+
   if (slide.layout === "chart" && slide.chart) {
     renderChart(page, slide, accent);
     return;
@@ -88,6 +98,11 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
 
   if (slide.layout === "comparison") {
     renderComparison(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "closing") {
+    renderClosing(page, slide, accent);
     return;
   }
 
@@ -199,9 +214,144 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
       margin: 0,
     });
   }
-  addBulletPanel(page, slide.body || [], 0.76, 2.72, 6.25, accent);
+  addBulletPanel(page, slide.body || [], 0.76, 2.72, slide.metric ? 5.35 : 6.25, accent);
+  if (slide.metric) {
+    addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
+  } else {
+    addSideMetric(page, accent, slide.visual);
+  }
   addTakeaway(page, slide.takeaway, accent);
-  addSideMetric(page, accent);
+}
+
+function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = (slide.body?.length ? slide.body : ["现状判断", "关键证据", "解决路径", "执行节奏"]).slice(0, 6);
+  items.forEach((item, i) => {
+    const y = 2.15 + i * 0.62;
+    page.addShape("rect", {
+      x: 0.86,
+      y,
+      w: 0.5,
+      h: 0.38,
+      fill: { color: i === 0 ? colors[accent] : colors.panel2, transparency: i === 0 ? 0 : 8 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 18 },
+    });
+    page.addText(String(i + 1).padStart(2, "0"), {
+      x: 0.98,
+      y: y + 0.09,
+      w: 0.25,
+      h: 0.14,
+      fontSize: 8,
+      bold: true,
+      color: i === 0 ? colors.bg : colors[accent],
+      margin: 0,
+      align: "center",
+    });
+    page.addText(item, {
+      x: 1.65,
+      y: y + 0.02,
+      w: 8.8,
+      h: 0.3,
+      fit: "shrink",
+      fontSize: 16,
+      bold: i === 0,
+      color: colors.text,
+      margin: 0,
+    });
+  });
+  addTakeaway(page, slide.takeaway || "A clear narrative map keeps the audience oriented before the evidence deep-dive.", accent);
+}
+
+function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addShape("rect", {
+    x: 0.78,
+    y: 1.35,
+    w: 0.12,
+    h: 4.5,
+    fill: { color: colors[accent] },
+    line: { color: colors[accent] },
+  });
+  page.addText(slide.kicker || "Section", {
+    x: 1.2,
+    y: 1.58,
+    w: 2.8,
+    h: 0.26,
+    fontSize: 10,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  page.addText(slide.title, {
+    x: 1.18,
+    y: 2.05,
+    w: 9.4,
+    h: 1.35,
+    fit: "shrink",
+    fontFace: "Aptos Display",
+    fontSize: 34,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+  });
+  page.addText(slide.subtitle || slide.takeaway || "", {
+    x: 1.22,
+    y: 3.65,
+    w: 7.6,
+    h: 0.52,
+    fit: "shrink",
+    fontSize: 15,
+    color: colors.muted,
+    margin: 0,
+  });
+}
+
+function renderClosing(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, {
+    x: 0.78,
+    y: 1.15,
+    w: 9.6,
+    h: 0.95,
+    fit: "shrink",
+    fontFace: "Aptos Display",
+    fontSize: 30,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+  });
+  const items = (slide.body || ["Confirm decision", "Assign owner", "Start next sprint"]).slice(0, 3);
+  items.forEach((item, i) => {
+    const x = 0.82 + i * 4.0;
+    page.addShape("rect", {
+      x,
+      y: 3.0,
+      w: 3.35,
+      h: 1.75,
+      fill: { color: colors.panel2, transparency: 4 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 16 },
+    });
+    page.addText(`0${i + 1}`, {
+      x: x + 0.28,
+      y: 3.28,
+      w: 0.55,
+      h: 0.28,
+      fontSize: 12,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(item, {
+      x: x + 0.28,
+      y: 3.85,
+      w: 2.65,
+      h: 0.62,
+      fit: "shrink",
+      fontSize: 16,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+  });
+  addTakeaway(page, slide.takeaway, accent);
 }
 
 function renderComparison(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
@@ -336,7 +486,7 @@ function addTakeaway(page: PptxGenJS.Slide, takeaway: string | undefined, accent
   });
 }
 
-function addSideMetric(page: PptxGenJS.Slide, accent: Accent) {
+function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, context: string | undefined, accent: Accent) {
   page.addShape("rect", {
     x: 9.45,
     y: 2.05,
@@ -345,7 +495,7 @@ function addSideMetric(page: PptxGenJS.Slide, accent: Accent) {
     fill: { color: colors.panel2, transparency: 8 },
     line: { color: colors.line, transparency: 14 },
   });
-  page.addText("Narrative", {
+  page.addText(label || "Metric", {
     x: 9.78,
     y: 2.48,
     w: 1.8,
@@ -355,25 +505,31 @@ function addSideMetric(page: PptxGenJS.Slide, accent: Accent) {
     color: colors[accent],
     margin: 0,
   });
-  page.addText("01", {
+  page.addText(value || "01", {
     x: 9.78,
     y: 3.02,
-    w: 1.7,
+    w: 1.95,
     h: 0.7,
-    fontSize: 34,
+    fit: "shrink",
+    fontSize: 30,
     bold: true,
     color: colors.text,
     margin: 0,
   });
-  page.addText("message-first slide", {
+  page.addText(context || "decision evidence", {
     x: 9.78,
     y: 3.92,
     w: 1.8,
-    h: 0.28,
+    h: 0.42,
+    fit: "shrink",
     fontSize: 9,
     color: colors.muted,
     margin: 0,
   });
+}
+
+function addSideMetric(page: PptxGenJS.Slide, accent: Accent, visual?: string) {
+  addMetricCard(page, "Visual logic", "01", visual || "message-first slide", accent);
 }
 
 function titleOptions(): PptxGenJS.TextPropsOptions {

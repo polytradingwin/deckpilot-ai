@@ -1,12 +1,12 @@
 import type { PresentationRequest } from "../src/shared/deck";
 import { consumeCredits, getCreditCost, getUserById } from "./auth";
-import { createDeckWithOpenAI } from "./openai";
+import { createDeckWithAI } from "./openai";
 import { renderDeckToPptx } from "./pptx";
 import { saveGeneration } from "./store";
 
 export async function generateAndSaveDeck(userId: string, input: PresentationRequest, options: { id?: string } = {}) {
   const creditCost = getCreditCost(input.slides);
-  const deck = await createDeckWithOpenAI(input);
+  const deck = await createDeckWithAI(input);
   const file = await renderDeckToPptx(deck);
   const filename = safeFilename(deck.title || "deckpilot-presentation");
   const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: options.id });

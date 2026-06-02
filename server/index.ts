@@ -8,6 +8,7 @@ import { savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
 import { findGeneration, listGenerations } from "./store";
+import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
 import type { PresentationRequest } from "../src/shared/deck";
 
 const appRoot = process.cwd();
@@ -15,6 +16,9 @@ dotenv.config({ path: path.resolve(appRoot, ".env"), override: true });
 dotenv.config({ path: path.resolve(appRoot, ".env.local"), override: true });
 if (process.env.FORCE_MOCK_OPENAI === "1") {
   process.env.MOCK_OPENAI = "1";
+}
+if (process.env.FORCE_SQLITE_STORE === "1") {
+  process.env.DATA_STORE = "sqlite";
 }
 
 const app = express();
@@ -42,13 +46,15 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    provider: "openai",
-    model: process.env.OPENAI_MODEL || "gpt-5.2",
+    provider: getAIProvider(),
+    model: getConfiguredPrimaryModel(),
     modelCandidates: process.env.OPENAI_MODEL_CANDIDATES || null,
     mock: process.env.MOCK_OPENAI === "1",
-    keyConfigured: Boolean(process.env.OPENAI_API_KEY),
+    keyConfigured: getAIProvider() === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.OPENAI_API_KEY),
     baseURLConfigured: Boolean(process.env.OPENAI_BASE_URL),
     dataStore: process.env.DATA_STORE === "supabase" ? "supabase" : "sqlite",
+    generationMode: getGenerationMode(),
+    maxSlides: getRuntimeMaxSlides(),
   });
 });
 
@@ -114,7 +120,8 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     if (!user) return;
 
     const requestedInput = await validateRequest(req.body, req.file, { extractUploadedPptx: !isNetlifyRuntime });
-    const input = isNetlifyRuntime && requestedInput.slides > 6 ? { ...requestedInput, slides: 6 } : requestedInput;
+    const maxSlides = getRuntimeMaxSlides();
+    const input = requestedInput.slides > maxSlides ? { ...requestedInput, slides: maxSlides } : requestedInput;
     const creditCost = getCreditCost(input.slides);
     if (user.creditsRemaining < creditCost) {
       res.status(402).json({
@@ -124,7 +131,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       return;
     }
 
-    if (isNetlifyRuntime) {
+    if (isQueuedGenerationRuntime()) {
       const jobId = randomUUID();
       const uploadedFile = req.file;
       const sourceFile = uploadedFile
@@ -258,6 +265,25 @@ function parseEnum<T extends string>(value: unknown, allowed: readonly T[], fiel
   throw new Error(`Invalid ${field}.`);
 }
 
+function getGenerationMode() {
+  if (process.env.GENERATION_WORKER_URL) return "external-worker";
+  if (isNetlifyRuntime) return "netlify-worker";
+  return "direct";
+}
+
+function isQueuedGenerationRuntime() {
+  return Boolean(process.env.GENERATION_WORKER_URL) || isNetlifyRuntime;
+}
+
+function getRuntimeMaxSlides() {
+  const configured = Number(process.env.MAX_GENERATION_SLIDES);
+  if (Number.isFinite(configured) && configured >= 4) {
+    return Math.min(30, Math.round(configured));
+  }
+
+  return process.env.GENERATION_WORKER_URL || !isNetlifyRuntime ? 30 : 6;
+}
+
 async function enqueueNetlifyBackgroundGeneration(
   req: express.Request,
   userId: string,
@@ -265,9 +291,9 @@ async function enqueueNetlifyBackgroundGeneration(
   sourceFile: { storedFilename: string; originalName: string } | null,
   jobId: string,
 ) {
-  const secret = process.env.SUPABASE_BACKEND_SECRET;
+  const secret = process.env.WORKER_SHARED_SECRET || process.env.SUPABASE_BACKEND_SECRET;
   if (!secret) {
-    throw new Error("SUPABASE_BACKEND_SECRET is required for Netlify background generation.");
+    throw new Error("WORKER_SHARED_SECRET or SUPABASE_BACKEND_SECRET is required for queued generation.");
   }
 
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
@@ -276,7 +302,8 @@ async function enqueueNetlifyBackgroundGeneration(
     throw new Error("Unable to resolve Netlify function host.");
   }
 
-  const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-worker`, {
+  const workerUrl = process.env.GENERATION_WORKER_URL || `${proto}://${host}/.netlify/functions/generate-ppt-worker`;
+  const response = await fetch(workerUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ secret, userId, input, sourceFile, jobId }),

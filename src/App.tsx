@@ -230,6 +230,7 @@ function App() {
   const [purpose, setPurpose] = useState<Purpose>("sales");
   const [style, setStyle] = useState<Style>("consulting");
   const [slides, setSlides] = useState(6);
+  const [maxSlides, setMaxSlides] = useState(6);
   const [language, setLanguage] = useState("简体中文");
   const [audience, setAudience] = useState("高管 / 客户决策层");
   const [prompt, setPrompt] = useState(
@@ -254,7 +255,21 @@ function App() {
 
   useEffect(() => {
     void refreshSession();
+    void refreshRuntimeConfig();
   }, []);
+
+  const refreshRuntimeConfig = async () => {
+    try {
+      const response = await fetch("/api/health");
+      if (!response.ok) return;
+      const payload = (await response.json()) as { maxSlides?: number };
+      const nextMax = Math.max(4, Math.min(30, Math.round(payload.maxSlides || 6)));
+      setMaxSlides(nextMax);
+      setSlides((current) => Math.min(Math.max(current, 4), nextMax));
+    } catch {
+      setMaxSlides(6);
+    }
+  };
 
   const refreshSession = async () => {
     try {
@@ -624,7 +639,7 @@ function App() {
                     <input
                       type="range"
                       min="4"
-                      max="6"
+                      max={maxSlides}
                       value={slides}
                       onChange={(event) => setSlides(Number(event.target.value))}
                     />

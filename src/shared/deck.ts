@@ -32,6 +32,12 @@ export type DeckSlide = {
   body?: string[];
   takeaway?: string;
   speakerNotes?: string;
+  visual?: string;
+  metric?: {
+    label: string;
+    value: string;
+    context?: string;
+  };
   chart?: {
     title: string;
     labels: string[];

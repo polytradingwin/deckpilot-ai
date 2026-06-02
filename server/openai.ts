@@ -2,6 +2,7 @@ import { ProxyAgent, setGlobalDispatcher } from "undici";
 import type { DeckSpec, PresentationRequest } from "../src/shared/deck";
 
 export const DEFAULT_MODEL = "gpt-5.2";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODELS = ["gpt-5.1", "gpt-5-mini"];
 let configuredProxy: string | null = null;
 
@@ -46,6 +47,17 @@ const deckSchema = {
           },
           takeaway: { type: "string" },
           speakerNotes: { type: "string" },
+          visual: { type: "string" },
+          metric: {
+            type: "object",
+            additionalProperties: false,
+            required: ["label", "value"],
+            properties: {
+              label: { type: "string" },
+              value: { type: "string" },
+              context: { type: "string" },
+            },
+          },
           chart: {
             type: "object",
             additionalProperties: false,
@@ -73,6 +85,31 @@ type OpenAIResponse = {
   }>;
 };
 
+type AnthropicResponse = {
+  content?: Array<{
+    type?: string;
+    text?: string;
+  }>;
+};
+
+export function getAIProvider() {
+  return (process.env.AI_PROVIDER || "openai").toLowerCase();
+}
+
+export function getConfiguredPrimaryModel() {
+  return getAIProvider() === "anthropic"
+    ? process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL
+    : process.env.OPENAI_MODEL || DEFAULT_MODEL;
+}
+
+export async function createDeckWithAI(input: PresentationRequest): Promise<DeckSpec> {
+  if (getAIProvider() === "anthropic") {
+    return createDeckWithAnthropic(input);
+  }
+
+  return createDeckWithOpenAI(input);
+}
+
 export async function createDeckWithOpenAI(input: PresentationRequest): Promise<DeckSpec> {
   if (process.env.MOCK_OPENAI === "1") {
     return createMockDeck(input);
@@ -94,6 +131,52 @@ export async function createDeckWithOpenAI(input: PresentationRequest): Promise<
   }
 
   return normalizeDeck(JSON.parse(text) as DeckSpec, input);
+}
+
+export async function createDeckWithAnthropic(input: PresentationRequest): Promise<DeckSpec> {
+  if (process.env.MOCK_OPENAI === "1") {
+    return createMockDeck(input);
+  }
+
+  configureOpenAIProxy();
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Add it to .env.local or choose AI_PROVIDER=openai.");
+  }
+
+  const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
+  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": process.env.ANTHROPIC_VERSION || "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: getMaxOutputTokens(input.slides),
+      temperature: 0.4,
+      system: buildSystemPrompt(),
+      messages: [
+        {
+          role: "user",
+          content: `${buildUserPrompt(input)}\n\nReturn only JSON. Do not wrap it in markdown.`,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await formatAnthropicError(response, model));
+  }
+
+  const text = extractAnthropicText((await response.json()) as AnthropicResponse);
+  if (!text) {
+    throw new Error("Anthropic did not return a structured deck.");
+  }
+
+  return normalizeDeck(JSON.parse(stripJsonFence(text)) as DeckSpec, input);
 }
 
 async function createResponseWithFallback(apiKey: string, models: string[], input: PresentationRequest) {
@@ -127,10 +210,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
         {
           role: "system",
           content: [
-            "You are a senior presentation strategist and visual information designer.",
-            "Create a concise, business-ready PowerPoint outline with strong narrative structure.",
-            "Return only valid JSON that matches the supplied schema.",
-            "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
+            buildSystemPrompt(),
           ].join("\n"),
         },
         {
@@ -138,7 +218,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
           content: buildUserPrompt(input),
         },
       ],
-      max_output_tokens: 6000,
+      max_output_tokens: getMaxOutputTokens(input.slides),
       text: {
         format: {
           type: "json_schema",
@@ -155,6 +235,17 @@ async function createResponse(apiKey: string, model: string, input: Presentation
   }
 
   return (await response.json()) as OpenAIResponse;
+}
+
+function buildSystemPrompt() {
+  return [
+    "You are a senior McKinsey-level presentation strategist, executive storyteller, and visual information designer.",
+    "Build board-ready PowerPoint decks with a clear storyline, MECE structure, crisp slide titles, evidence-first claims, and executive-level language.",
+    "Every slide title must be a message sentence, not a topic label.",
+    "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
+    "Design for editable PowerPoint: short text, strong hierarchy, one key message per slide, and layouts that can be rendered as shapes, text, and simple charts.",
+    "Return only valid JSON matching the supplied deck structure. No markdown, no prose outside JSON.",
+  ].join("\n");
 }
 
 export function getModelCandidates() {
@@ -203,6 +294,16 @@ async function formatOpenAIError(response: Response, model: string) {
   return `OpenAI API request failed: ${message}`;
 }
 
+async function formatAnthropicError(response: Response, model: string) {
+  const fallback = `Anthropic API request failed with ${response.status}.`;
+  try {
+    const body = (await response.json()) as { error?: { message?: string; type?: string } };
+    return `Anthropic API request failed for ${model}: ${body.error?.message || fallback}`;
+  } catch {
+    return fallback;
+  }
+}
+
 function extractOutputText(response: OpenAIResponse) {
   if (response.output_text) {
     return response.output_text;
@@ -212,6 +313,22 @@ function extractOutputText(response: OpenAIResponse) {
     ?.flatMap((item) => item.content || [])
     .map((content) => content.text || "")
     .join("")
+    .trim();
+}
+
+function extractAnthropicText(response: AnthropicResponse) {
+  return response.content
+    ?.filter((item) => item.type === "text" || !item.type)
+    .map((item) => item.text || "")
+    .join("")
+    .trim();
+}
+
+function stripJsonFence(text: string) {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
     .trim();
 }
 
@@ -230,11 +347,26 @@ function buildUserPrompt(input: PresentationRequest) {
     "",
     "Requirements:",
     `- Produce exactly ${requestedSlides} slides.`,
-    "- Include a cover slide, a clear agenda or narrative map, evidence slides, and a closing slide.",
-    "- Use chart layout when useful, with plausible placeholder data if the user did not provide exact numbers.",
+    "- Start with a cover slide and an agenda/narrative map, then build the argument with evidence, implications, and decisions.",
+    "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
+    "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent.",
+    "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
+    "- Add a short takeaway to most non-cover slides.",
+    "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
+    "- Add metric when a slide benefits from a large evidence number or decision KPI.",
+    "- Speaker notes should explain the presenter talk track in 1 to 3 sentences.",
     "- The deck must be directly renderable into PowerPoint.",
   ].join("\n");
+}
+
+function getMaxOutputTokens(slides: number) {
+  const configured = Number(process.env.AI_MAX_OUTPUT_TOKENS);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(32000, Math.round(configured));
+  }
+
+  return Math.min(24000, Math.max(6000, clampSlideCount(slides) * 700));
 }
 
 function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
