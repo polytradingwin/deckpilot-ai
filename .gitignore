@@ -8,3 +8,6 @@ dist/
 output/
 .playwright-cli/
 .vercel/
+
+# Local Netlify folder
+.netlify
