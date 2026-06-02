@@ -254,7 +254,7 @@ async function enqueueNetlifyBackgroundGeneration(
     throw new Error("Unable to resolve Netlify function host.");
   }
 
-  const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-background`, {
+  const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-worker`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ secret, userId, input, sourceFile }),
