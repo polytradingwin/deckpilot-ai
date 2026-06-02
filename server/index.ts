@@ -1,8 +1,10 @@
 import dotenv from "dotenv";
 import express from "express";
 import multer from "multer";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
+import { savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
 import { findGeneration, listGenerations } from "./store";
@@ -110,7 +112,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const input = await validateRequest(req.body, req.file);
+    const input = await validateRequest(req.body, req.file, { extractUploadedPptx: !process.env.NETLIFY });
     const creditCost = getCreditCost(input.slides);
     if (user.creditsRemaining < creditCost) {
       res.status(402).json({
@@ -121,7 +123,19 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     }
 
     if (process.env.NETLIFY) {
-      await enqueueNetlifyBackgroundGeneration(req, user.id, input);
+      const uploadedFile = req.file;
+      const sourceFile = uploadedFile
+        ? {
+            storedFilename: `source-${randomUUID()}.pptx`,
+            originalName: uploadedFile.originalname,
+          }
+        : null;
+
+      if (sourceFile && uploadedFile) {
+        await savePptxFile(sourceFile.storedFilename, uploadedFile.buffer);
+      }
+
+      await enqueueNetlifyBackgroundGeneration(req, user.id, input, sourceFile);
       res.status(202).json({ status: "queued" });
       return;
     }
@@ -172,14 +186,18 @@ if (isDirectRun) {
 
 export default app;
 
-async function validateRequest(body: Partial<PresentationRequest>, file?: Express.Multer.File): Promise<PresentationRequest> {
+async function validateRequest(
+  body: Partial<PresentationRequest>,
+  file?: Express.Multer.File,
+  options: { extractUploadedPptx?: boolean } = { extractUploadedPptx: true },
+): Promise<PresentationRequest> {
   const source = parseEnum(body.source, ["ppt", "outline", "topic"], "source");
   const purpose = parseEnum(body.purpose, ["fundraising", "sales", "training", "report"], "purpose");
   const style = parseEnum(body.style, ["consulting", "product", "brand", "academic"], "style");
   const slides = Number(body.slides);
   let prompt = String(body.prompt || "").trim();
 
-  if (file) {
+  if (file && options.extractUploadedPptx !== false) {
     const extracted = await extractTextFromPptx(file.buffer);
     prompt = [
       `Uploaded PowerPoint: ${file.originalname}`,
@@ -218,7 +236,12 @@ function parseEnum<T extends string>(value: unknown, allowed: readonly T[], fiel
   throw new Error(`Invalid ${field}.`);
 }
 
-async function enqueueNetlifyBackgroundGeneration(req: express.Request, userId: string, input: PresentationRequest) {
+async function enqueueNetlifyBackgroundGeneration(
+  req: express.Request,
+  userId: string,
+  input: PresentationRequest,
+  sourceFile: { storedFilename: string; originalName: string } | null,
+) {
   const secret = process.env.SUPABASE_BACKEND_SECRET;
   if (!secret) {
     throw new Error("SUPABASE_BACKEND_SECRET is required for Netlify background generation.");
@@ -233,7 +256,7 @@ async function enqueueNetlifyBackgroundGeneration(req: express.Request, userId: 
   const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-background`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret, userId, input }),
+    body: JSON.stringify({ secret, userId, input, sourceFile }),
   });
 
   if (!response.ok && response.status !== 202) {
