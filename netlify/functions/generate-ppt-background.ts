@@ -1,4 +1,3 @@
-import type { Handler } from "@netlify/functions";
 import type { PresentationRequest } from "../../src/shared/deck";
 import { generateAndSaveDeck } from "../../server/generateTask";
 import { readPptxFile } from "../../server/fileStorage";
@@ -9,12 +8,12 @@ type QueuedSourceFile = {
   originalName: string;
 };
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed." }) };
+export default async function handler(request: Request) {
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed." }), { status: 405 });
   }
 
-  const payload = JSON.parse(event.body || "{}") as {
+  const payload = (await request.json()) as {
     secret?: string;
     userId?: string;
     input?: PresentationRequest;
@@ -22,18 +21,18 @@ export const handler: Handler = async (event) => {
   };
 
   if (!payload.secret || payload.secret !== process.env.SUPABASE_BACKEND_SECRET) {
-    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized." }) };
+    return new Response(JSON.stringify({ error: "Unauthorized." }), { status: 401 });
   }
 
   if (!payload.userId || !payload.input) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Missing generation payload." }) };
+    return new Response(JSON.stringify({ error: "Missing generation payload." }), { status: 400 });
   }
 
   const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
   await generateAndSaveDeck(payload.userId, input);
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true }) };
-};
+  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+}
 
 async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {
   const file = await readPptxFile(sourceFile.storedFilename);
