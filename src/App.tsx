@@ -403,7 +403,7 @@ function App() {
   };
 
   const waitForQueuedGeneration = async (id: string) => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 5000));
       const response = await fetch(`/api/generations/${id}/status`);
       if (!response.ok) continue;

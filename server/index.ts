@@ -146,7 +146,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       }
 
       await createGenerationJob(user.id, jobId);
-      await enqueueNetlifyBackgroundGeneration(req, user.id, input, sourceFile, jobId);
+      await enqueueBackgroundGeneration(req, user.id, input, sourceFile, jobId);
       res.status(202).json({ status: "queued", id: jobId });
       return;
     }
@@ -273,6 +273,7 @@ function parseEnum<T extends string>(value: unknown, allowed: readonly T[], fiel
 
 function getGenerationMode() {
   if (process.env.GENERATION_WORKER_URL) return "external-worker";
+  if (isNetlifyRuntime && useNetlifyBackgroundWorker()) return "netlify-background-worker";
   if (isNetlifyRuntime) return "netlify-worker";
   return "direct";
 }
@@ -287,10 +288,14 @@ function getRuntimeMaxSlides() {
     return Math.min(30, Math.round(configured));
   }
 
-  return process.env.GENERATION_WORKER_URL || !isNetlifyRuntime ? 30 : 6;
+  return process.env.GENERATION_WORKER_URL || !isNetlifyRuntime || useNetlifyBackgroundWorker() ? 30 : 6;
 }
 
-async function enqueueNetlifyBackgroundGeneration(
+function useNetlifyBackgroundWorker() {
+  return process.env.NETLIFY_BACKGROUND_GENERATION !== "0";
+}
+
+async function enqueueBackgroundGeneration(
   req: express.Request,
   userId: string,
   input: PresentationRequest,
@@ -308,7 +313,8 @@ async function enqueueNetlifyBackgroundGeneration(
     throw new Error("Unable to resolve Netlify function host.");
   }
 
-  const workerUrl = process.env.GENERATION_WORKER_URL || `${proto}://${host}/.netlify/functions/generate-ppt-worker`;
+  const netlifyWorkerName = useNetlifyBackgroundWorker() ? "generate-ppt-background" : "generate-ppt-worker";
+  const workerUrl = process.env.GENERATION_WORKER_URL || `${proto}://${host}/.netlify/functions/${netlifyWorkerName}`;
   const response = await fetch(workerUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

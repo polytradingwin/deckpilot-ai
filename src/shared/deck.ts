@@ -25,7 +25,7 @@ export type DeckSpec = {
 };
 
 export type DeckSlide = {
-  layout: "cover" | "agenda" | "section" | "content" | "chart" | "comparison" | "closing";
+  layout: "cover" | "agenda" | "section" | "executiveSummary" | "content" | "chart" | "comparison" | "timeline" | "matrix" | "closing";
   kicker?: string;
   title: string;
   subtitle?: string;

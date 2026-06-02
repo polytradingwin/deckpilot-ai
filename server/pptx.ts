@@ -91,6 +91,11 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
+  if (slide.layout === "executiveSummary") {
+    renderExecutiveSummary(page, slide, accent);
+    return;
+  }
+
   if (slide.layout === "chart" && slide.chart) {
     renderChart(page, slide, accent);
     return;
@@ -98,6 +103,16 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
 
   if (slide.layout === "comparison") {
     renderComparison(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "timeline") {
+    renderTimeline(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "matrix") {
+    renderMatrix(page, slide, accent);
     return;
   }
 
@@ -165,7 +180,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
     y: 3.82,
     w: 3.9,
     h: 1.65,
-      fill: { color: colors.panel2, transparency: 6 },
+    fill: { color: colors.panel2, transparency: 6 },
     line: { color: colors.line, transparency: 12 },
   });
   page.addText("Generated deck", {
@@ -219,6 +234,52 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
   } else {
     addSideMetric(page, accent, slide.visual);
+  }
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = (slide.body || ["关键判断", "推荐动作", "预期影响"]).slice(0, 4);
+
+  items.forEach((item, i) => {
+    const x = 0.82 + (i % 2) * 4.15;
+    const y = 2.3 + Math.floor(i / 2) * 1.35;
+    page.addShape("rect", {
+      x,
+      y,
+      w: 3.75,
+      h: 1.02,
+      fill: { color: colors.panel2, transparency: 3 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 14 },
+    });
+    page.addText(String(i + 1).padStart(2, "0"), {
+      x: x + 0.28,
+      y: y + 0.24,
+      w: 0.45,
+      h: 0.22,
+      fontSize: 10,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(item, {
+      x: x + 0.82,
+      y: y + 0.22,
+      w: 2.65,
+      h: 0.46,
+      fit: "shrink",
+      fontSize: 13,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+  });
+
+  if (slide.metric) {
+    addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
+  } else {
+    addMetricCard(page, "Decision", "01", slide.visual || "recommended path", accent);
   }
   addTakeaway(page, slide.takeaway, accent);
 }
@@ -430,6 +491,101 @@ function renderChart(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
       fontSize: 7,
       color: colors.muted,
       align: "center",
+      margin: 0,
+    });
+  });
+
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = (slide.body || ["启动", "验证", "扩展", "规模化"]).slice(0, 5);
+  const startX = 0.95;
+  const stepW = 2.18;
+
+  page.addShape("line", {
+    x: startX + 0.3,
+    y: 3.42,
+    w: stepW * (items.length - 1),
+    h: 0,
+    line: { color: colors[accent], transparency: 12, width: 1.5 },
+  });
+
+  items.forEach((item, i) => {
+    const x = startX + i * stepW;
+    page.addShape("ellipse", {
+      x,
+      y: 3.08,
+      w: 0.68,
+      h: 0.68,
+      fill: { color: i === 0 ? colors[accent] : colors.panel2, transparency: i === 0 ? 0 : 3 },
+      line: { color: colors[accent], transparency: i === 0 ? 0 : 22 },
+    });
+    page.addText(String(i + 1), {
+      x: x + 0.22,
+      y: 3.27,
+      w: 0.24,
+      h: 0.16,
+      fontSize: 9,
+      bold: true,
+      color: i === 0 ? colors.bg : colors[accent],
+      margin: 0,
+      align: "center",
+    });
+    page.addText(item, {
+      x: x - 0.08,
+      y: 4.12,
+      w: 1.55,
+      h: 0.72,
+      fit: "shrink",
+      fontSize: 12,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+      align: "center",
+    });
+  });
+
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderMatrix(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = (slide.body || ["高价值 / 低复杂", "高价值 / 高复杂", "低价值 / 低复杂", "低价值 / 高复杂"]).slice(0, 4);
+  const labels = ["High impact", "Strategic bet", "Quick win", "Defer"];
+
+  items.forEach((item, i) => {
+    const x = 0.86 + (i % 2) * 4.72;
+    const y = 2.34 + Math.floor(i / 2) * 1.42;
+    page.addShape("rect", {
+      x,
+      y,
+      w: 4.1,
+      h: 1.05,
+      fill: { color: colors.panel2, transparency: 4 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 16 },
+    });
+    page.addText(labels[i], {
+      x: x + 0.28,
+      y: y + 0.2,
+      w: 1.2,
+      h: 0.18,
+      fit: "shrink",
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(item, {
+      x: x + 0.28,
+      y: y + 0.5,
+      w: 3.35,
+      h: 0.34,
+      fit: "shrink",
+      fontSize: 12,
+      bold: true,
+      color: colors.text,
       margin: 0,
     });
   });

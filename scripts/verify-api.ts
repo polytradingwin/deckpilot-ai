@@ -90,7 +90,10 @@ async function downloadQueuedGeneration(outPath: string, id: string) {
     });
     if (!response.ok) continue;
 
-    const payload = (await response.json()) as { status?: "pending" | "ready"; record?: { id: string } };
+    const payload = (await response.json()) as { status?: "pending" | "queued" | "running" | "ready" | "failed"; record?: { id: string }; error?: string };
+    if (payload.status === "failed") {
+      throw new Error(payload.error || "Background generation failed.");
+    }
     if (payload.status !== "ready" || !payload.record?.id) continue;
 
     const download = await fetch(`${apiBase}/api/generations/${payload.record.id}/download`, {

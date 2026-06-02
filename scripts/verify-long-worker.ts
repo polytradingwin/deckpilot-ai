@@ -41,11 +41,18 @@ if (!payload.id) {
   throw new Error("Queued generation did not return an id.");
 }
 
-for (let attempt = 0; attempt < 120; attempt += 1) {
+for (let attempt = 0; attempt < 180; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 5000));
   const status = await fetch(`${apiBase}/api/generations/${payload.id}/status`, { headers: { Cookie: cookie } });
   if (!status.ok) continue;
-  const body = (await status.json()) as { status?: "pending" | "ready"; record?: { id: string; slideCount: number } };
+  const body = (await status.json()) as {
+    status?: "pending" | "queued" | "running" | "ready" | "failed";
+    record?: { id: string; slideCount: number };
+    error?: string;
+  };
+  if (body.status === "failed") {
+    throw new Error(body.error || "Long worker generation failed.");
+  }
   if (body.status !== "ready" || !body.record?.id) continue;
 
   const download = await fetch(`${apiBase}/api/generations/${payload.id}/download`, { headers: { Cookie: cookie } });

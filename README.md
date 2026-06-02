@@ -80,7 +80,18 @@ The API reads provider settings at runtime, so changing models is an environment
 
 ## Long Deck Worker
 
-Netlify Functions are suitable for short jobs. For 10-30 slide decks, run the standalone worker on a long-running Node host such as Railway, Render, Fly.io, or a VPS:
+On Netlify, 10-30 slide decks use `netlify/functions/generate-ppt-background.mts`, a Netlify Background Function. It returns `202` immediately and can continue the generation job for up to 15 minutes. The API stores job status in Supabase, and the frontend polls until the PPTX is ready.
+
+Default Netlify production behavior:
+
+```env
+MAX_GENERATION_SLIDES=30
+NETLIFY_BACKGROUND_GENERATION=1
+```
+
+Set `NETLIFY_BACKGROUND_GENERATION=0` only when you intentionally want the short worker fallback.
+
+For larger scale or a dedicated worker host, run the standalone worker on a long-running Node host such as Railway, Render, Fly.io, or a VPS:
 
 ```bash
 npm run worker
@@ -99,7 +110,7 @@ WORKER_SHARED_SECRET=replace_with_a_long_random_secret
 MAX_GENERATION_SLIDES=30
 ```
 
-The API still handles login, credits, upload parsing, history, and downloads. The worker only performs the long PPT generation job and writes the result back to Supabase.
+When `GENERATION_WORKER_URL` is set, it overrides Netlify Background Functions. The API still handles login, credits, upload parsing, history, and downloads. The worker only performs the long PPT generation job and writes the result back to Supabase.
 
 ## Verification
 

@@ -35,7 +35,7 @@ const deckSchema = {
         properties: {
           layout: {
             type: "string",
-            enum: ["cover", "agenda", "section", "content", "chart", "comparison", "closing"],
+            enum: ["cover", "agenda", "section", "executiveSummary", "content", "chart", "comparison", "timeline", "matrix", "closing"],
           },
           kicker: { type: "string" },
           title: { type: "string" },
@@ -251,6 +251,8 @@ function buildSystemPrompt() {
     "You are a senior McKinsey-level presentation strategist, executive storyteller, and visual information designer.",
     "Build board-ready PowerPoint decks with a clear storyline, MECE structure, crisp slide titles, evidence-first claims, and executive-level language.",
     "Every slide title must be a message sentence, not a topic label.",
+    "A strong deck should feel like a finished consultant/business presentation, not a generic AI outline.",
+    "Use a narrative spine: situation, complication, insight, recommendation, proof, rollout, risks, decision.",
     "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
     "Design for editable PowerPoint: short text, strong hierarchy, one key message per slide, and layouts that can be rendered as shapes, text, and simple charts.",
     "Return only valid JSON matching the supplied deck structure. No markdown, no prose outside JSON.",
@@ -348,6 +350,7 @@ function buildUserPrompt(input: PresentationRequest) {
     `Source type: ${input.source}`,
     `Use case: ${input.purpose}`,
     `Visual style: ${input.style}`,
+    `Style guidance: ${styleGuidance(input.style)}`,
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
@@ -356,9 +359,10 @@ function buildUserPrompt(input: PresentationRequest) {
     "",
     "Requirements:",
     `- Produce exactly ${requestedSlides} slides.`,
-    "- Start with a cover slide and an agenda/narrative map, then build the argument with evidence, implications, and decisions.",
+    "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
-    "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent.",
+    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, comparison for tradeoffs, timeline for rollout, matrix for priorities or risk mapping.",
+    "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
     "- Add a short takeaway to most non-cover slides.",
@@ -386,11 +390,20 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   const targetCount = clampSlideCount(input.slides);
   const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, targetCount) : [];
 
-  while (slides.length < Math.min(targetCount, 4)) {
+  if (slides[0] && slides[0].layout !== "cover") {
+    slides[0] = { ...slides[0], layout: "cover" };
+  }
+
+  if (targetCount >= 5 && slides[1] && !["agenda", "executiveSummary"].includes(slides[1].layout)) {
+    slides[1] = { ...slides[1], layout: "agenda" };
+  }
+
+  while (slides.length < targetCount) {
     slides.push({
-      layout: slides.length === 0 ? "cover" : "content",
+      layout: fallbackLayout(slides.length, targetCount),
       title: fallbackTitle(input, slides.length),
       body: ["补充核心观点", "完善证据链", "明确下一步行动"],
+      takeaway: "该页用于补足完整叙事结构，建议后续用真实业务数据替换占位内容。",
     });
   }
 
@@ -402,6 +415,27 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     theme: deck.theme || { accent: "gold", mood: input.style },
     slides,
   };
+}
+
+function fallbackLayout(index: number, total: number): DeckSpec["slides"][number]["layout"] {
+  if (index === 0) return "cover";
+  if (index === 1) return "agenda";
+  if (index === total - 1) return "closing";
+  if (index === 2) return "executiveSummary";
+  if (index % 7 === 0) return "timeline";
+  if (index % 5 === 0) return "matrix";
+  if (index % 4 === 0) return "chart";
+  return "content";
+}
+
+function styleGuidance(style: PresentationRequest["style"]) {
+  const guidance: Record<PresentationRequest["style"], string> = {
+    consulting: "dense executive logic, clean hypothesis-led pages, quantified implications, sober visual hierarchy",
+    product: "product narrative, capability modules, workflow diagrams, adoption path, proof points and user value",
+    brand: "launch story, visual hooks, emotional positioning, audience promise, campaign-ready phrasing",
+    academic: "definition, method, evidence chain, limitations, conclusion, rigorous but readable argument",
+  };
+  return guidance[style];
 }
 
 function clampSlideCount(count: number) {
@@ -450,10 +484,32 @@ function createMockDeck(input: PresentationRequest): DeckSpec {
       takeaway: "优先把高频场景产品化，能最快形成可见收益。",
     },
     {
+      layout: "executiveSummary",
+      kicker: "Executive summary",
+      title: "建议优先把高频汇报场景产品化",
+      body: ["先覆盖销售、融资、培训和内部汇报四类高频场景", "用统一模板体系保证输出稳定性", "用后台长任务承载 20-30 页复杂生成"],
+      metric: { label: "Target output", value: "30 页", context: "稳定后台生成上限" },
+      takeaway: "产品竞争力来自稳定输出、可编辑文件和接近人工顾问的叙事质量。",
+    },
+    {
       layout: "comparison",
       kicker: "Before / After",
       title: "从零散材料到完整汇报",
       body: ["输入：旧 PPT、文稿、大纲或一句话主题", "处理：重构叙事、生成页面、统一风格", "输出：可编辑 PowerPoint 文件"],
+    },
+    {
+      layout: "timeline",
+      kicker: "Rollout",
+      title: "上线节奏应先跑通生成闭环，再扩展商业闭环",
+      body: ["第 1 阶段：登录、历史记录、文件存储和稳定生成", "第 2 阶段：高质量模板、长任务 Worker 和模型切换", "第 3 阶段：支付限额、域名、监控和增长分析"],
+      takeaway: "先保证用户能拿到高质量 PPT，再逐步引入付费限制。",
+    },
+    {
+      layout: "matrix",
+      kicker: "Priority",
+      title: "功能优先级应围绕生成成功率和成稿质量排序",
+      body: ["高价值 / 低复杂：模型提示词和模板升级", "高价值 / 高复杂：长任务 Worker 和支付限制", "低价值 / 低复杂：基础文案优化", "低价值 / 高复杂：过早做复杂团队协作"],
+      takeaway: "当前阶段最值得投入的是稳定生成和模板质量。",
     },
     {
       layout: "closing",
@@ -466,7 +522,7 @@ function createMockDeck(input: PresentationRequest): DeckSpec {
 
   while (baseSlides.length < requestedSlides) {
     baseSlides.splice(baseSlides.length - 1, 0, {
-      layout: "content",
+      layout: fallbackLayout(baseSlides.length, requestedSlides),
       kicker: "Detail",
       title: `补充页面 ${baseSlides.length}`,
       body: ["核心观点", "支撑证据", "业务影响", "执行建议"],
