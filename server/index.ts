@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { consumeCredits, getCreditCost, getUserById, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
 import { createDeckWithOpenAI } from "./openai";
 import { extractTextFromPptx } from "./pptxReader";
@@ -164,7 +164,9 @@ app.use((_req, res) => {
   res.sendFile(path.join(distDir, "index.html"));
 });
 
-if (!process.env.VERCEL) {
+const isDirectRun = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+
+if (isDirectRun) {
   app.listen(port, "127.0.0.1", () => {
     console.log(`DeckPilot API listening on http://127.0.0.1:${port}`);
   });
