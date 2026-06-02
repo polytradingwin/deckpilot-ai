@@ -1,4 +1,5 @@
-﻿import PptxGenJSModule from "pptxgenjs/dist/pptxgen.cjs.js";
+﻿// @ts-expect-error The local CJS wrapper forces Netlify to use pptxgenjs' require export.
+import PptxGenJSModule from "./pptxgenjs.cjs";
 import type PptxGenJS from "pptxgenjs";
 import type { DeckSlide, DeckSpec } from "../src/shared/deck";
 
