@@ -6,6 +6,18 @@
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["pptxgenjs"]
+  included_files = [
+    "node_modules/pptxgenjs/**",
+    "node_modules/jszip/**",
+    "node_modules/image-size/**",
+    "node_modules/pako/**",
+    "node_modules/lie/**",
+    "node_modules/immediate/**",
+    "node_modules/readable-stream/**",
+    "node_modules/safe-buffer/**",
+    "node_modules/string_decoder/**",
+    "node_modules/util-deprecate/**"
+  ]
 
 [[redirects]]
   from = "/api/*"
