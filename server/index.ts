@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { consumeCredits, getCreditCost, getUserById, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
 import { createDeckWithOpenAI } from "./openai";
 import { extractTextFromPptx } from "./pptxReader";
@@ -10,10 +9,9 @@ import { renderDeckToPptx } from "./pptx";
 import { findGeneration, listGenerations, saveGeneration } from "./store";
 import type { PresentationRequest } from "../src/shared/deck";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
-dotenv.config({ path: path.resolve(__dirname, "../.env.local"), override: true });
+const appRoot = process.cwd();
+dotenv.config({ path: path.resolve(appRoot, ".env"), override: true });
+dotenv.config({ path: path.resolve(appRoot, ".env.local"), override: true });
 if (process.env.FORCE_MOCK_OPENAI === "1") {
   process.env.MOCK_OPENAI = "1";
 }
@@ -158,13 +156,14 @@ app.use((error: Error, _req: express.Request, res: express.Response, next: expre
   res.status(400).json({ error: error.message || "Request failed." });
 });
 
-const distDir = path.resolve(__dirname, "../dist");
+const distDir = path.resolve(appRoot, "dist");
 app.use(express.static(distDir));
 app.use((_req, res) => {
   res.sendFile(path.join(distDir, "index.html"));
 });
 
-const isDirectRun = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+const entrypoint = process.argv[1]?.replace(/\\/g, "/") || "";
+const isDirectRun = entrypoint.endsWith("/server/index.ts") || entrypoint.endsWith("/server/index.js");
 
 if (isDirectRun) {
   app.listen(port, "127.0.0.1", () => {
