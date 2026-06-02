@@ -346,9 +346,12 @@ function App() {
       });
 
       if (response.status === 202) {
-        const queuedAt = new Date().toISOString();
+        const payload = (await response.json().catch(() => null)) as { id?: string } | null;
         setGenerationError("正在后台生成，请稍候...");
-        const record = await waitForQueuedGeneration(queuedAt);
+        if (!payload?.id) {
+          throw new Error("生成任务已提交，但没有返回任务编号。请刷新后重试。");
+        }
+        const record = await waitForQueuedGeneration(payload.id);
         await downloadGenerationRecord(record);
         setGenerationError("");
         setGenerated(true);
@@ -384,15 +387,13 @@ function App() {
     }
   };
 
-  const waitForQueuedGeneration = async (queuedAt: string) => {
-    const startedAt = new Date(queuedAt).getTime();
-    for (let attempt = 0; attempt < 36; attempt += 1) {
+  const waitForQueuedGeneration = async (id: string) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 5000));
-      const response = await fetch("/api/generations");
+      const response = await fetch(`/api/generations/${id}/status`);
       if (!response.ok) continue;
-      const payload = (await response.json()) as { records?: GenerationRecord[] };
-      const record = payload.records?.find((item) => new Date(item.createdAt).getTime() >= startedAt);
-      if (record) return record;
+      const payload = (await response.json()) as { status?: "pending" | "ready"; record?: GenerationRecord };
+      if (payload.status === "ready" && payload.record) return payload.record;
     }
     throw new Error("后台生成仍在进行中，请稍后在历史记录里下载。");
   };

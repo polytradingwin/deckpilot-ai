@@ -124,6 +124,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     }
 
     if (isNetlifyRuntime) {
+      const jobId = randomUUID();
       const uploadedFile = req.file;
       const sourceFile = uploadedFile
         ? {
@@ -136,8 +137,8 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
         await savePptxFile(sourceFile.storedFilename, uploadedFile.buffer);
       }
 
-      await enqueueNetlifyBackgroundGeneration(req, user.id, input, sourceFile);
-      res.status(202).json({ status: "queued" });
+      await enqueueNetlifyBackgroundGeneration(req, user.id, input, sourceFile, jobId);
+      res.status(202).json({ status: "queued", id: jobId });
       return;
     }
 
@@ -168,6 +169,25 @@ app.use((error: Error, _req: express.Request, res: express.Response, next: expre
     return;
   }
   res.status(400).json({ error: error.message || "Request failed." });
+});
+
+app.get("/api/generations/:id/status", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const id = String(req.params.id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(404).json({ error: "Generation not found." });
+    return;
+  }
+
+  const generation = await findGeneration(user.id, id);
+  if (!generation) {
+    res.json({ status: "pending" });
+    return;
+  }
+
+  res.json({ status: "ready", record: generation.record });
 });
 
 const distDir = path.resolve(appRoot, "dist");
@@ -242,6 +262,7 @@ async function enqueueNetlifyBackgroundGeneration(
   userId: string,
   input: PresentationRequest,
   sourceFile: { storedFilename: string; originalName: string } | null,
+  jobId: string,
 ) {
   const secret = process.env.SUPABASE_BACKEND_SECRET;
   if (!secret) {
@@ -257,7 +278,7 @@ async function enqueueNetlifyBackgroundGeneration(
   const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-worker`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret, userId, input, sourceFile }),
+    body: JSON.stringify({ secret, userId, input, sourceFile, jobId }),
   });
 
   if (!response.ok && response.status !== 202) {

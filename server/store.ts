@@ -34,8 +34,16 @@ type GenerationRow = {
   credit_cost: number;
 };
 
-export async function saveGeneration(userId: string, input: PresentationRequest, deck: DeckSpec, file: Buffer, filename: string, creditCost: number) {
-  const id = randomUUID();
+export async function saveGeneration(
+  userId: string,
+  input: PresentationRequest,
+  deck: DeckSpec,
+  file: Buffer,
+  filename: string,
+  creditCost: number,
+  options: { id?: string } = {},
+) {
+  const id = options.id || randomUUID();
   const storedFilename = `${id}.pptx`;
   await savePptxFile(storedFilename, file);
   const createdAt = new Date().toISOString();

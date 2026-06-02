@@ -11,12 +11,14 @@ type QueuedSourceFile = {
 
 type QueuedGenerationPayload = {
   secret?: string;
+  jobId?: string;
   userId?: string;
   input?: PresentationRequest;
   sourceFile?: QueuedSourceFile;
 };
 
-type ValidQueuedGenerationPayload = Omit<QueuedGenerationPayload, "userId" | "input"> & {
+type ValidQueuedGenerationPayload = Omit<QueuedGenerationPayload, "jobId" | "userId" | "input"> & {
+  jobId: string;
   userId: string;
   input: PresentationRequest;
 };
@@ -33,23 +35,23 @@ export default async function handler(request: Request, context: Context) {
     return json({ error: "Unauthorized." }, 401);
   }
 
-  if (!payload.userId || !payload.input) {
+  if (!payload.jobId || !payload.userId || !payload.input) {
     console.log("deckpilot worker missing payload");
     return json({ error: "Missing generation payload." }, 400);
   }
 
-  context.waitUntil(runGeneration({ ...payload, userId: payload.userId, input: payload.input }));
-  return json({ status: "queued" }, 202);
+  context.waitUntil(runGeneration({ ...payload, jobId: payload.jobId, userId: payload.userId, input: payload.input }));
+  return json({ status: "queued", id: payload.jobId }, 202);
 }
 
 async function runGeneration(payload: ValidQueuedGenerationPayload) {
   try {
-    console.log("deckpilot worker generating", payload.userId, payload.input.source, payload.input.slides, Boolean(payload.sourceFile));
+    console.log("deckpilot worker generating", payload.jobId, payload.userId, payload.input.source, payload.input.slides, Boolean(payload.sourceFile));
     const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
-    await generateAndSaveDeck(payload.userId, input);
-    console.log("deckpilot worker done", payload.userId);
+    await generateAndSaveDeck(payload.userId, input, { id: payload.jobId });
+    console.log("deckpilot worker done", payload.jobId, payload.userId);
   } catch (error) {
-    console.error("deckpilot worker failed", error);
+    console.error("deckpilot worker failed", payload.jobId, error);
   }
 }
 

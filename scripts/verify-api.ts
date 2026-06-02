@@ -63,10 +63,13 @@ async function requestDeck(url: string, body: Record<string, string> | FormData,
           body: JSON.stringify(body),
         };
 
-  const queuedAt = Date.now();
   const response = await fetch(url, init);
   if (response.status === 202) {
-    await downloadLatestGeneration(outPath, queuedAt);
+    const payload = (await response.json()) as { id?: string };
+    if (!payload.id) {
+      throw new Error("Queued generation did not return an id.");
+    }
+    await downloadQueuedGeneration(outPath, payload.id);
     return;
   }
 
@@ -79,19 +82,18 @@ async function requestDeck(url: string, body: Record<string, string> | FormData,
   await fs.writeFile(outPath, buffer);
 }
 
-async function downloadLatestGeneration(outPath: string, queuedAt: number) {
+async function downloadQueuedGeneration(outPath: string, id: string) {
   for (let attempt = 0; attempt < 36; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    const response = await fetch(`${apiBase}/api/generations`, {
+    const response = await fetch(`${apiBase}/api/generations/${id}/status`, {
       headers: { Cookie: cookie },
     });
     if (!response.ok) continue;
 
-    const payload = (await response.json()) as { records?: Array<{ id: string; createdAt: string }> };
-    const record = payload.records?.find((item) => new Date(item.createdAt).getTime() >= queuedAt);
-    if (!record) continue;
+    const payload = (await response.json()) as { status?: "pending" | "ready"; record?: { id: string } };
+    if (payload.status !== "ready" || !payload.record?.id) continue;
 
-    const download = await fetch(`${apiBase}/api/generations/${record.id}/download`, {
+    const download = await fetch(`${apiBase}/api/generations/${payload.record.id}/download`, {
       headers: { Cookie: cookie },
     });
     if (!download.ok) continue;
