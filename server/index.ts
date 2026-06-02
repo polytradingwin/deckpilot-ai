@@ -113,7 +113,8 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const input = await validateRequest(req.body, req.file, { extractUploadedPptx: !isNetlifyRuntime });
+    const requestedInput = await validateRequest(req.body, req.file, { extractUploadedPptx: !isNetlifyRuntime });
+    const input = isNetlifyRuntime && requestedInput.slides > 6 ? { ...requestedInput, slides: 6 } : requestedInput;
     const creditCost = getCreditCost(input.slides);
     if (user.creditsRemaining < creditCost) {
       res.status(402).json({

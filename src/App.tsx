@@ -229,7 +229,7 @@ function App() {
   const [source, setSource] = useState<SourceType>("outline");
   const [purpose, setPurpose] = useState<Purpose>("sales");
   const [style, setStyle] = useState<Style>("consulting");
-  const [slides, setSlides] = useState(12);
+  const [slides, setSlides] = useState(6);
   const [language, setLanguage] = useState("简体中文");
   const [audience, setAudience] = useState("高管 / 客户决策层");
   const [prompt, setPrompt] = useState(
@@ -623,8 +623,8 @@ function App() {
                     <strong>{slides} 页</strong>
                     <input
                       type="range"
-                      min="6"
-                      max="30"
+                      min="4"
+                      max="6"
                       value={slides}
                       onChange={(event) => setSlides(Number(event.target.value))}
                     />
