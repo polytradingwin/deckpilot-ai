@@ -248,6 +248,7 @@ function App() {
   const [user, setUser] = useState<UserAccount | null>(null);
   const [authError, setAuthError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginIntent, setLoginIntent] = useState<"" | "generate">("");
 
   const slideTitles = useMemo(() => slideMap[purpose], [purpose]);
 
@@ -291,6 +292,12 @@ function App() {
       setUser(payload.user);
       setLoginOpen(false);
       await refreshGenerations();
+      if (loginIntent === "generate") {
+        setLoginIntent("");
+        window.setTimeout(() => {
+          document.querySelector<HTMLButtonElement>('[data-generate-button="true"]')?.click();
+        }, 100);
+      }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "登录失败。");
     } finally {
@@ -314,8 +321,9 @@ function App() {
 
     try {
       if (!user) {
+        setLoginIntent("generate");
         setLoginOpen(true);
-        throw new Error("请先登录后再生成 PPT。");
+        return;
       }
 
       if (source === "ppt" && !selectedFile) {
@@ -635,7 +643,7 @@ function App() {
                   <button className="text-button" type="button" onClick={() => setStep(2)}>
                     上一步
                   </button>
-                  <button className="primary-button" type="button" onClick={handleGenerate}>
+                  <button className="primary-button" type="button" onClick={handleGenerate} data-generate-button="true">
                     {isGenerating ? "生成中" : generated ? "重新生成 PPT" : "生成 PPT"}
                     <Sparkles size={18} />
                   </button>
@@ -822,8 +830,8 @@ function App() {
               <X size={18} />
             </button>
             <Mail size={24} />
-            <h2 id="login-title">登录 DeckPilot AI</h2>
-            <p>使用邮箱保留生成记录和订阅额度。</p>
+            <h2 id="login-title">输入邮箱即可试用</h2>
+            <p>无需密码或验证码。邮箱只用于保存生成记录和试用额度。</p>
             <label>
               <span>邮箱</span>
               <input
