@@ -238,6 +238,15 @@ async function createResponse(apiKey: string, model: string, input: Presentation
 }
 
 function buildSystemPrompt() {
+  if (process.env.DECKPILOT_LONG_WORKER !== "1") {
+    return [
+      "You are a senior presentation strategist and visual information designer.",
+      "Create a concise, business-ready PowerPoint outline with strong narrative structure.",
+      "Return only valid JSON that matches the supplied schema.",
+      "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
+    ].join("\n");
+  }
+
   return [
     "You are a senior McKinsey-level presentation strategist, executive storyteller, and visual information designer.",
     "Build board-ready PowerPoint decks with a clear storyline, MECE structure, crisp slide titles, evidence-first claims, and executive-level language.",
@@ -364,6 +373,10 @@ function getMaxOutputTokens(slides: number) {
   const configured = Number(process.env.AI_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) {
     return Math.min(32000, Math.round(configured));
+  }
+
+  if (process.env.DECKPILOT_LONG_WORKER !== "1") {
+    return Math.min(6000, Math.max(3500, clampSlideCount(slides) * 550));
   }
 
   return Math.min(24000, Math.max(6000, clampSlideCount(slides) * 700));

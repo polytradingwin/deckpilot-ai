@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: deckpilot-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile.worker
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_PORT
+        value: 8790
+      - key: MAX_GENERATION_SLIDES
+        value: 30
+      - key: AI_PROVIDER
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        sync: false
+      - key: DATA_STORE
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_BACKEND_SECRET
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: deckpilot-pptx
+      - key: WORKER_SHARED_SECRET
+        sync: false

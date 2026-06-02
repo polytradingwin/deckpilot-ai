@@ -12,6 +12,7 @@ if (process.env.FORCE_MOCK_OPENAI === "1") {
 if (process.env.FORCE_SQLITE_STORE === "1") {
   process.env.DATA_STORE = "sqlite";
 }
+process.env.DECKPILOT_LONG_WORKER = "1";
 
 const app = express();
 const port = Number(process.env.WORKER_PORT || process.env.PORT || 8790);
