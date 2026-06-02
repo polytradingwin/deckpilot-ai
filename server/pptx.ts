@@ -1,7 +1,8 @@
-﻿import PptxGenJS from "pptxgenjs";
+﻿import PptxGenJSModule from "pptxgenjs/dist/pptxgen.cjs.js";
+import type PptxGenJS from "pptxgenjs";
 import type { DeckSlide, DeckSpec } from "../src/shared/deck";
 
-const PptxGen = ((PptxGenJS as unknown as { default?: typeof PptxGenJS }).default || PptxGenJS) as typeof PptxGenJS;
+const PptxGen = ((PptxGenJSModule as unknown as { default?: typeof PptxGenJS }).default || PptxGenJSModule) as typeof PptxGenJS;
 
 const colors = {
   bg: "08090B",
