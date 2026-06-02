@@ -2,11 +2,10 @@ import dotenv from "dotenv";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { consumeCredits, getCreditCost, getUserById, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
-import { createDeckWithOpenAI } from "./openai";
+import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
+import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
-import { renderDeckToPptx } from "./pptx";
-import { findGeneration, listGenerations, saveGeneration } from "./store";
+import { findGeneration, listGenerations } from "./store";
 import type { PresentationRequest } from "../src/shared/deck";
 
 const appRoot = process.cwd();
@@ -121,13 +120,13 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       return;
     }
 
-    const deck = await createDeckWithOpenAI(input);
-    const file = await renderDeckToPptx(deck);
-    const filename = safeFilename(deck.title || "deckpilot-presentation");
-    const asciiFilename = safeAsciiFilename(filename);
-    const record = await saveGeneration(user.id, input, deck, file, filename, creditCost);
-    await consumeCredits(user.id, creditCost);
-    const updatedUser = await getUserById(user.id);
+    if (process.env.NETLIFY) {
+      await enqueueNetlifyBackgroundGeneration(req, user.id, input);
+      res.status(202).json({ status: "queued" });
+      return;
+    }
+
+    const { deck, file, filename, asciiFilename, record, updatedUser } = await generateAndSaveDeck(user.id, input);
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader(
@@ -219,20 +218,25 @@ function parseEnum<T extends string>(value: unknown, allowed: readonly T[], fiel
   throw new Error(`Invalid ${field}.`);
 }
 
-function safeFilename(name: string) {
-  return name
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 80) || "deckpilot-presentation";
-}
+async function enqueueNetlifyBackgroundGeneration(req: express.Request, userId: string, input: PresentationRequest) {
+  const secret = process.env.SUPABASE_BACKEND_SECRET;
+  if (!secret) {
+    throw new Error("SUPABASE_BACKEND_SECRET is required for Netlify background generation.");
+  }
 
-function safeAsciiFilename(name: string) {
-  return (
-    name
-      .normalize("NFKD")
-      .replace(/[^\w.-]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 80) || "deckpilot-presentation"
-  );
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  if (!host) {
+    throw new Error("Unable to resolve Netlify function host.");
+  }
+
+  const response = await fetch(`${proto}://${host}/.netlify/functions/generate-ppt-background`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret, userId, input }),
+  });
+
+  if (!response.ok && response.status !== 202) {
+    throw new Error(`Failed to queue background generation: ${response.status} ${await response.text()}`);
+  }
 }

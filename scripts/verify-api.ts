@@ -63,7 +63,13 @@ async function requestDeck(url: string, body: Record<string, string> | FormData,
           body: JSON.stringify(body),
         };
 
+  const queuedAt = Date.now();
   const response = await fetch(url, init);
+  if (response.status === 202) {
+    await downloadLatestGeneration(outPath, queuedAt);
+    return;
+  }
+
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`${response.status} ${message}`);
@@ -71,6 +77,31 @@ async function requestDeck(url: string, body: Record<string, string> | FormData,
 
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(outPath, buffer);
+}
+
+async function downloadLatestGeneration(outPath: string, queuedAt: number) {
+  for (let attempt = 0; attempt < 36; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const response = await fetch(`${apiBase}/api/generations`, {
+      headers: { Cookie: cookie },
+    });
+    if (!response.ok) continue;
+
+    const payload = (await response.json()) as { records?: Array<{ id: string; createdAt: string }> };
+    const record = payload.records?.find((item) => new Date(item.createdAt).getTime() >= queuedAt);
+    if (!record) continue;
+
+    const download = await fetch(`${apiBase}/api/generations/${record.id}/download`, {
+      headers: { Cookie: cookie },
+    });
+    if (!download.ok) continue;
+
+    const buffer = Buffer.from(await download.arrayBuffer());
+    await fs.writeFile(outPath, buffer);
+    return;
+  }
+
+  throw new Error("Timed out waiting for background generation.");
 }
 
 async function login() {

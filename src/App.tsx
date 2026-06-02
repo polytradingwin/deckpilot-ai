@@ -337,6 +337,18 @@ function App() {
         body: formData,
       });
 
+      if (response.status === 202) {
+        const queuedAt = new Date().toISOString();
+        setGenerationError("正在后台生成，请稍候...");
+        const record = await waitForQueuedGeneration(queuedAt);
+        await downloadGenerationRecord(record);
+        setGenerationError("");
+        setGenerated(true);
+        await refreshGenerations();
+        await refreshSession();
+        return;
+      }
+
       if (!response.ok) {
         if (response.status === 401) setLoginOpen(true);
         const payload = await response.json().catch(() => ({ error: "生成失败，请稍后重试。" }));
@@ -362,6 +374,34 @@ function App() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const waitForQueuedGeneration = async (queuedAt: string) => {
+    const startedAt = new Date(queuedAt).getTime();
+    for (let attempt = 0; attempt < 36; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      const response = await fetch("/api/generations");
+      if (!response.ok) continue;
+      const payload = (await response.json()) as { records?: GenerationRecord[] };
+      const record = payload.records?.find((item) => new Date(item.createdAt).getTime() >= startedAt);
+      if (record) return record;
+    }
+    throw new Error("后台生成仍在进行中，请稍后在历史记录里下载。");
+  };
+
+  const downloadGenerationRecord = async (record: GenerationRecord) => {
+    const response = await fetch(`/api/generations/${record.id}/download`);
+    if (!response.ok) {
+      throw new Error("PPT 已生成，但下载失败，请稍后在历史记录里下载。");
+    }
+
+    const blob = await response.blob();
+    const nextUrl = URL.createObjectURL(blob);
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    setDownloadUrl(nextUrl);
+    setDownloadName(record.filename);
+    setGenerationId(record.id);
+    downloadDeck(nextUrl, record.filename);
   };
 
   const refreshGenerations = async () => {
