@@ -9,29 +9,39 @@ type QueuedSourceFile = {
 };
 
 export default async function handler(request: Request) {
-  if (request.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed." }), { status: 405 });
+  try {
+    console.log("deckpilot background start", request.method);
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed." }), { status: 405 });
+    }
+
+    const payload = (await request.json()) as {
+      secret?: string;
+      userId?: string;
+      input?: PresentationRequest;
+      sourceFile?: QueuedSourceFile;
+    };
+
+    if (!payload.secret || payload.secret !== process.env.SUPABASE_BACKEND_SECRET) {
+      console.log("deckpilot background unauthorized");
+      return new Response(JSON.stringify({ error: "Unauthorized." }), { status: 401 });
+    }
+
+    if (!payload.userId || !payload.input) {
+      console.log("deckpilot background missing payload");
+      return new Response(JSON.stringify({ error: "Missing generation payload." }), { status: 400 });
+    }
+
+    console.log("deckpilot background generating", payload.userId, payload.input.source, payload.input.slides, Boolean(payload.sourceFile));
+    const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
+    await generateAndSaveDeck(payload.userId, input);
+    console.log("deckpilot background done", payload.userId);
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  } catch (error) {
+    console.error("deckpilot background failed", error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Background generation failed." }), { status: 500 });
   }
-
-  const payload = (await request.json()) as {
-    secret?: string;
-    userId?: string;
-    input?: PresentationRequest;
-    sourceFile?: QueuedSourceFile;
-  };
-
-  if (!payload.secret || payload.secret !== process.env.SUPABASE_BACKEND_SECRET) {
-    return new Response(JSON.stringify({ error: "Unauthorized." }), { status: 401 });
-  }
-
-  if (!payload.userId || !payload.input) {
-    return new Response(JSON.stringify({ error: "Missing generation payload." }), { status: 400 });
-  }
-
-  const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
-  await generateAndSaveDeck(payload.userId, input);
-
-  return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
 
 async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {
