@@ -2,6 +2,7 @@ import type { PresentationRequest } from "../src/shared/deck";
 import { generateAndSaveDeck } from "./generateTask";
 import { readPptxFile } from "./fileStorage";
 import { extractTextFromPptx } from "./pptxReader";
+import { updateGenerationJob } from "./store";
 
 export type QueuedSourceFile = {
   storedFilename: string;
@@ -40,9 +41,15 @@ export function validateQueuedPayload(payload: QueuedGenerationPayload): ValidQu
 
 export async function runQueuedGeneration(payload: ValidQueuedGenerationPayload) {
   console.log("deckpilot worker generating", payload.jobId, payload.userId, payload.input.source, payload.input.slides, Boolean(payload.sourceFile));
-  const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
-  await generateAndSaveDeck(payload.userId, input, { id: payload.jobId });
-  console.log("deckpilot worker done", payload.jobId, payload.userId);
+  await updateGenerationJob(payload.userId, payload.jobId, "running");
+  try {
+    const input = payload.sourceFile ? await withUploadedPptxText(payload.input, payload.sourceFile) : payload.input;
+    await generateAndSaveDeck(payload.userId, input, { id: payload.jobId });
+    console.log("deckpilot worker done", payload.jobId, payload.userId);
+  } catch (error) {
+    await updateGenerationJob(payload.userId, payload.jobId, "failed", error instanceof Error ? error.message : "Generation failed.");
+    throw error;
+  }
 }
 
 async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {

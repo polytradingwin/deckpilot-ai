@@ -1,4 +1,4 @@
-import type { GenerationRecord } from "./store";
+import type { GenerationJobRecord, GenerationJobStatus, GenerationRecord } from "./store";
 import type { UserAccount } from "./auth";
 
 type SupabaseLoginResult = {
@@ -64,6 +64,19 @@ export async function supabaseListGenerations(userId: string) {
 export async function supabaseFindGeneration(userId: string, id: string) {
   const result = await callSupabaseBackend<{ record: SupabaseGenerationRecord | null }>("find_generation", { userId, id });
   return result.record;
+}
+
+export async function supabaseCreateGenerationJob(userId: string, id: string) {
+  await callSupabaseBackend<{ ok: boolean }>("create_generation_job", { userId, id });
+}
+
+export async function supabaseUpdateGenerationJob(userId: string, id: string, status: GenerationJobStatus, error?: string) {
+  await callSupabaseBackend<{ ok: boolean }>("update_generation_job", { userId, id, status, error: error || null });
+}
+
+export async function supabaseFindGenerationJob(userId: string, id: string) {
+  const result = await callSupabaseBackend<{ job: GenerationJobRecord | null }>("find_generation_job", { userId, id });
+  return result.job;
 }
 
 async function callSupabaseBackend<T>(action: string, payload: Record<string, unknown>): Promise<T> {

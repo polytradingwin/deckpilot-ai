@@ -407,7 +407,10 @@ function App() {
       await new Promise((resolve) => window.setTimeout(resolve, 5000));
       const response = await fetch(`/api/generations/${id}/status`);
       if (!response.ok) continue;
-      const payload = (await response.json()) as { status?: "pending" | "ready"; record?: GenerationRecord };
+      const payload = (await response.json()) as { status?: "pending" | "queued" | "running" | "ready" | "failed"; record?: GenerationRecord; error?: string };
+      if (payload.status === "failed") {
+        throw new Error(payload.error || "生成失败，请稍后重试。");
+      }
       if (payload.status === "ready" && payload.record) return payload.record;
     }
     throw new Error("后台生成仍在进行中，请稍后在历史记录里下载。");

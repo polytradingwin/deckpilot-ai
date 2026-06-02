@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { DeckSpec, PresentationRequest } from "../src/shared/deck";
 import { getLocalPptxPath, readPptxFile, savePptxFile } from "./fileStorage";
-import { supabaseFindGeneration, supabaseListGenerations, supabaseSaveGeneration, useSupabaseStore } from "./supabaseStore";
+import {
+  supabaseCreateGenerationJob,
+  supabaseFindGeneration,
+  supabaseFindGenerationJob,
+  supabaseListGenerations,
+  supabaseSaveGeneration,
+  supabaseUpdateGenerationJob,
+  useSupabaseStore,
+} from "./supabaseStore";
 
 export type GenerationRecord = {
   id: string;
@@ -16,6 +24,26 @@ export type GenerationRecord = {
   audience: string;
   size: number;
   creditCost: number;
+};
+
+export type GenerationJobStatus = "queued" | "running" | "ready" | "failed";
+
+export type GenerationJobRecord = {
+  id: string;
+  userId: string;
+  status: GenerationJobStatus;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type GenerationJobRow = {
+  id: string;
+  user_id: string;
+  status: GenerationJobStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type GenerationRow = {
@@ -65,6 +93,7 @@ export async function saveGeneration(
 
   if (useSupabaseStore()) {
     await supabaseSaveGeneration({ ...record, userId, storedFilename });
+    await updateGenerationJob(userId, id, "ready");
     return record;
   }
 
@@ -96,7 +125,63 @@ export async function saveGeneration(
       record.creditCost,
     );
 
+  await updateGenerationJob(userId, id, "ready");
   return record;
+}
+
+export async function createGenerationJob(userId: string, id: string) {
+  if (useSupabaseStore()) {
+    await supabaseCreateGenerationJob(userId, id);
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const { getDb } = await import("./db");
+  getDb()
+    .prepare(
+      `
+      INSERT OR REPLACE INTO generation_jobs (id, user_id, status, error, created_at, updated_at)
+      VALUES (?, ?, 'queued', NULL, ?, ?)
+    `,
+    )
+    .run(id, userId, now, now);
+}
+
+export async function updateGenerationJob(userId: string, id: string, status: GenerationJobStatus, error?: string) {
+  if (useSupabaseStore()) {
+    await supabaseUpdateGenerationJob(userId, id, status, error);
+    return;
+  }
+
+  const { getDb } = await import("./db");
+  getDb()
+    .prepare(
+      `
+      UPDATE generation_jobs
+      SET status = ?, error = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    )
+    .run(status, error || null, new Date().toISOString(), id, userId);
+}
+
+export async function findGenerationJob(userId: string, id: string): Promise<GenerationJobRecord | null> {
+  if (useSupabaseStore()) {
+    return supabaseFindGenerationJob(userId, id);
+  }
+
+  const { getDb } = await import("./db");
+  const row = getDb()
+    .prepare(
+      `
+      SELECT id, user_id, status, error, created_at, updated_at
+      FROM generation_jobs
+      WHERE user_id = ? AND id = ?
+    `,
+    )
+    .get(userId, id) as GenerationJobRow | undefined;
+
+  return row ? mapGenerationJob(row) : null;
 }
 
 export async function listGenerations(userId: string): Promise<GenerationRecord[]> {
@@ -161,5 +246,16 @@ function mapGeneration(row: GenerationRow): GenerationRecord {
     audience: row.audience,
     size: row.size,
     creditCost: row.credit_cost,
+  };
+}
+
+function mapGenerationJob(row: GenerationJobRow): GenerationJobRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    status: row.status,
+    error: row.error || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

@@ -43,6 +43,15 @@ db.exec(`
     size INTEGER NOT NULL,
     credit_cost INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS generation_jobs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 export function getDb() {

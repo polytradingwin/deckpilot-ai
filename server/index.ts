@@ -7,7 +7,7 @@ import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession }
 import { savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
-import { findGeneration, listGenerations } from "./store";
+import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
 import type { PresentationRequest } from "../src/shared/deck";
 
@@ -145,6 +145,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
         await savePptxFile(sourceFile.storedFilename, uploadedFile.buffer);
       }
 
+      await createGenerationJob(user.id, jobId);
       await enqueueNetlifyBackgroundGeneration(req, user.id, input, sourceFile, jobId);
       res.status(202).json({ status: "queued", id: jobId });
       return;
@@ -191,7 +192,12 @@ app.get("/api/generations/:id/status", async (req, res) => {
 
   const generation = await findGeneration(user.id, id);
   if (!generation) {
-    res.json({ status: "pending" });
+    const job = await findGenerationJob(user.id, id);
+    if (job?.status === "failed") {
+      res.json({ status: "failed", error: job.error || "Generation failed." });
+      return;
+    }
+    res.json({ status: job?.status || "pending" });
     return;
   }
 
