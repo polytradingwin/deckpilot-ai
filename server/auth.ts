@@ -21,7 +21,7 @@ const cookieName = "deckpilot_session";
 const sessionDays = 30;
 
 export function getDefaultCredits() {
-  return Number(process.env.FREE_CREDITS || 75);
+  return Number(process.env.FREE_CREDITS || 200);
 }
 
 export function getCreditCost(slides: number) {
