@@ -19,6 +19,7 @@ if (process.env.FORCE_MOCK_OPENAI === "1") {
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
+const isNetlifyRuntime = process.env.DEPLOY_TARGET === "netlify" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -112,7 +113,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const input = await validateRequest(req.body, req.file, { extractUploadedPptx: !process.env.NETLIFY });
+    const input = await validateRequest(req.body, req.file, { extractUploadedPptx: !isNetlifyRuntime });
     const creditCost = getCreditCost(input.slides);
     if (user.creditsRemaining < creditCost) {
       res.status(402).json({
@@ -122,7 +123,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       return;
     }
 
-    if (process.env.NETLIFY) {
+    if (isNetlifyRuntime) {
       const uploadedFile = req.file;
       const sourceFile = uploadedFile
         ? {
