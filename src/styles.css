@@ -114,8 +114,16 @@ main {
   font-size: 0.95rem;
 }
 
-.header-nav a:hover {
+.header-nav a:hover,
+.nav-link-button:hover {
   color: var(--text);
+}
+
+.nav-link-button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
 }
 
 .language-switcher {
@@ -1051,6 +1059,7 @@ main {
 
 .site-footer {
   justify-content: space-between;
+  gap: 18px;
   width: min(calc(100% - 48px), 1200px);
   min-height: 86px;
   margin: 0 auto;
@@ -1058,9 +1067,34 @@ main {
   color: var(--muted);
 }
 
+.site-footer div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
 .site-footer span {
   color: var(--text);
   font-weight: 900;
+}
+
+.site-footer small {
+  color: var(--muted);
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.footer-links button {
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.footer-links button:hover {
+  color: var(--text);
 }
 
 .modal-backdrop {
@@ -1073,7 +1107,8 @@ main {
   background: rgba(0, 0, 0, 0.72);
 }
 
-.login-modal {
+.login-modal,
+.legal-modal {
   position: relative;
   display: grid;
   gap: 16px;
@@ -1085,13 +1120,42 @@ main {
   box-shadow: var(--shadow);
 }
 
+.legal-modal {
+  width: min(100%, 760px);
+  max-height: min(760px, calc(100svh - 40px));
+  overflow: auto;
+}
+
 .login-modal h2,
-.login-modal p {
+.login-modal p,
+.legal-modal h2,
+.legal-modal p {
   margin: 0;
 }
 
-.login-modal p {
+.login-modal p,
+.legal-modal p,
+.legal-modal small {
   color: var(--muted);
+}
+
+.policy-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.policy-sections section {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.policy-sections h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.policy-sections p {
+  line-height: 1.75;
 }
 
 .login-modal label {
@@ -1101,6 +1165,15 @@ main {
 
 .login-modal label span {
   color: var(--muted);
+}
+
+.dev-code {
+  border: 1px solid rgba(167, 200, 202, 0.28);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--cyan) !important;
+  background: rgba(167, 200, 202, 0.08);
+  font-weight: 800;
 }
 
 .icon-button {
@@ -1178,6 +1251,7 @@ main {
   }
 
   .header-nav a,
+  .nav-link-button,
   .language-switcher {
     display: none;
   }
@@ -1249,6 +1323,16 @@ main {
 
   .select-button {
     min-height: 132px;
+  }
+
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 0;
+  }
+
+  .footer-links {
+    flex-wrap: wrap;
   }
 }
 

@@ -3,7 +3,7 @@ import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
+import { getCreditCost, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
 import { createSignedPptxUpload, savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
@@ -85,9 +85,19 @@ app.get("/api/session", async (req, res) => {
   res.json({ user: await findUserBySession(req) });
 });
 
+app.post("/api/auth/code", async (req, res) => {
+  try {
+    const result = await requestLoginCode(String(req.body?.email || ""));
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "验证码发送失败。";
+    res.status(400).json({ error: message });
+  }
+});
+
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const user = await loginWithEmail(String(req.body?.email || ""), res);
+    const user = await verifyLoginCode(String(req.body?.email || ""), String(req.body?.code || ""), res);
     res.json({ user });
   } catch (error) {
     const message = error instanceof Error ? error.message : "登录失败。";
@@ -287,7 +297,7 @@ async function validateRequest(
   file?: Express.Multer.File,
   options: { extractUploadedPptx?: boolean; sourceFileProvided?: boolean } = { extractUploadedPptx: true },
 ): Promise<PresentationRequest> {
-  const source = parseEnum(body.source, ["ppt", "outline", "topic"], "source");
+  const source = parseEnum(body.source, ["ppt", "outline"], "source");
   const purpose = parseEnum(body.purpose, ["fundraising", "sales", "training", "report"], "purpose");
   const style = parseEnum(body.style, ["consulting", "product", "brand", "academic"], "style");
   const slides = Number(body.slides);

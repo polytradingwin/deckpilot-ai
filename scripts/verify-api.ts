@@ -150,10 +150,22 @@ async function downloadQueuedGeneration(outPath: string, id: string) {
 }
 
 async function login() {
+  const email = `verify-${Date.now()}@deckpilot.local`;
+  const codeResponse = await fetch(`${apiBase}/api/auth/code`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ email }),
+  });
+
+  const codePayload = (await codeResponse.json().catch(() => ({}))) as { devCode?: string; error?: string };
+  if (!codeResponse.ok || !codePayload.devCode) {
+    throw new Error(`Login code failed: ${codeResponse.status} ${codePayload.error || "dev code unavailable"}`);
+  }
+
   const response = await fetch(`${apiBase}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ email: `verify-${Date.now()}@deckpilot.local` }),
+    body: JSON.stringify({ email, code: codePayload.devCode }),
   });
 
   if (!response.ok) {

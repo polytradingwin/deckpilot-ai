@@ -7,13 +7,10 @@ import {
   Eye,
   FileText,
   FileUp,
-  Gauge,
   Languages,
-  Layers,
   Lock,
   LogIn,
   Mail,
-  MessageSquareText,
   Presentation,
   Shield,
   Sparkles,
@@ -23,9 +20,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SourceType = "ppt" | "outline" | "topic";
+type SourceType = "ppt" | "outline";
 type Purpose = "fundraising" | "sales" | "training" | "report";
 type Style = "consulting" | "product" | "brand" | "academic";
+type DeliveryMode = "presenting" | "reading";
+type PolicyPage = "terms" | "privacy" | "refund";
 
 type Option<T extends string> = {
   id: T;
@@ -66,44 +65,36 @@ const sourceOptions: Option<SourceType>[] = [
   },
   {
     id: "outline",
-    title: "文稿 / 大纲",
-    description: "把已有文字变成结构完整的演示",
+    title: "文稿或大纲",
+    description: "粘贴脚本、文稿或结构化大纲",
     icon: FileText,
-  },
-  {
-    id: "topic",
-    title: "一句话主题",
-    description: "从想法开始生成完整叙事框架",
-    icon: Sparkles,
   },
 ];
 
-const purposeOptions: Option<Purpose>[] = [
+const deliveryOptions: Option<DeliveryMode>[] = [
   {
-    id: "fundraising",
-    title: "融资路演",
-    description: "市场、产品、商业模式和财务故事",
-    icon: Gauge,
-  },
-  {
-    id: "sales",
-    title: "销售方案",
-    description: "客户痛点、价值主张和行动建议",
+    id: "presenting",
+    title: "给人讲",
+    description: "用于现场演讲、路演、汇报或销售沟通",
     icon: Presentation,
   },
   {
-    id: "training",
-    title: "课程培训",
-    description: "知识拆解、案例演示和课后总结",
-    icon: Layers,
-  },
-  {
-    id: "report",
-    title: "内部汇报",
-    description: "目标、进展、数据和下一步计划",
-    icon: MessageSquareText,
+    id: "reading",
+    title: "给人看",
+    description: "用于异步阅读、决策材料或会后发送",
+    icon: Eye,
   },
 ];
+
+const deliveryPurposeMap: Record<DeliveryMode, Purpose> = {
+  presenting: "sales",
+  reading: "report",
+};
+
+const deliverySlideMap: Record<DeliveryMode, string[]> = {
+  presenting: ["开场定位与听众承诺", "现状判断与关键矛盾", "解决方案与价值证明", "行动建议与下一步"],
+  reading: ["封面与摘要结论", "背景与核心信息", "证据、图表与判断", "风险、决策与后续动作"],
+};
 
 const styleOptions: Option<Style>[] = [
   {
@@ -224,6 +215,83 @@ const faqs = [
   },
 ];
 
+const policyContent: Record<PolicyPage, { title: string; updated: string; sections: Array<{ heading: string; body: string }> }> = {
+  terms: {
+    title: "Terms of Service",
+    updated: "Last updated: June 4, 2026",
+    sections: [
+      {
+        heading: "Service",
+        body: "DeckPilot AI helps users transform uploaded PowerPoint files, scripts, outlines, and related instructions into editable presentation files. You are responsible for making sure the materials you upload are yours or that you have permission to use them.",
+      },
+      {
+        heading: "Account",
+        body: "A verified email login is used to keep your generation history, quota, and downloads connected to your account. You are responsible for activity under your email session.",
+      },
+      {
+        heading: "Generated Output",
+        body: "AI output can contain mistakes. You should review all generated slides, facts, charts, and recommendations before using them in business, academic, legal, financial, or public settings.",
+      },
+      {
+        heading: "Acceptable Use",
+        body: "Do not upload illegal, infringing, confidential third-party, malicious, or abusive content. We may restrict access when usage threatens the service, other users, or our infrastructure.",
+      },
+      {
+        heading: "Contact",
+        body: "For service questions, contact service@deckevo.com.",
+      },
+    ],
+  },
+  privacy: {
+    title: "Privacy Policy",
+    updated: "Last updated: June 4, 2026",
+    sections: [
+      {
+        heading: "Data We Process",
+        body: "We process your email address, uploaded files, prompts, generated decks, usage records, and technical request data so the product can generate PPT files, store history, and manage quota.",
+      },
+      {
+        heading: "AI and Storage Providers",
+        body: "Your content may be sent to configured AI providers for generation and to storage/database providers for file delivery and history persistence. We use this data to operate the product, not to sell personal information.",
+      },
+      {
+        heading: "Retention",
+        body: "Generation records and files are retained so you can download previous decks. You can request deletion by contacting service@deckevo.com from the account email.",
+      },
+      {
+        heading: "Security",
+        body: "We use account sessions, server-side storage, and access checks to protect generated files. No online service can guarantee absolute security, so avoid uploading materials you are not allowed to share with an AI service.",
+      },
+      {
+        heading: "Contact",
+        body: "Privacy requests can be sent to service@deckevo.com.",
+      },
+    ],
+  },
+  refund: {
+    title: "Refund Policy",
+    updated: "Last updated: June 4, 2026",
+    sections: [
+      {
+        heading: "Current Status",
+        body: "Payment is not live yet, so there are no paid purchases to refund at this stage. Trial credits are provided for product testing and may change before commercial launch.",
+      },
+      {
+        heading: "After Payment Launch",
+        body: "When paid plans are enabled, refund requests should be submitted within 7 days of purchase. We will review failed generations, duplicate charges, and cases where credits were charged but no downloadable PPT was produced.",
+      },
+      {
+        heading: "Non-refundable Cases",
+        body: "Downloaded and successfully generated decks, used credits, custom work, or abuse of the service may not be refundable unless required by applicable law.",
+      },
+      {
+        heading: "Contact",
+        body: "Refund questions can be sent to service@deckevo.com with your account email and order reference once payment is live.",
+      },
+    ],
+  },
+};
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 function apiPath(path: string) {
@@ -240,7 +308,7 @@ function apiFetch(path: string, init: RequestInit = {}) {
 function App() {
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<SourceType>("outline");
-  const [purpose, setPurpose] = useState<Purpose>("sales");
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("presenting");
   const [style, setStyle] = useState<Style>("consulting");
   const [slides, setSlides] = useState(6);
   const [maxSlides, setMaxSlides] = useState(6);
@@ -259,12 +327,17 @@ function App() {
   const [recentGenerations, setRecentGenerations] = useState<GenerationRecord[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [authStep, setAuthStep] = useState<"email" | "code">("email");
+  const [devLoginCode, setDevLoginCode] = useState("");
   const [user, setUser] = useState<UserAccount | null>(null);
   const [authError, setAuthError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginIntent, setLoginIntent] = useState<"" | "generate">("");
+  const [legalPage, setLegalPage] = useState<PolicyPage | null>(null);
 
-  const slideTitles = useMemo(() => slideMap[purpose], [purpose]);
+  const purpose = deliveryPurposeMap[deliveryMode];
+  const slideTitles = useMemo(() => deliverySlideMap[deliveryMode] || slideMap[purpose], [deliveryMode, purpose]);
 
   useEffect(() => {
     void refreshSession();
@@ -302,7 +375,45 @@ function App() {
     }
   };
 
-  const handleLogin = async () => {
+  const openLogin = () => {
+    setAuthError("");
+    setDevLoginCode("");
+    setVerificationCode("");
+    setAuthStep("email");
+    setLoginOpen(true);
+  };
+
+  const closeLogin = () => {
+    setLoginOpen(false);
+    setAuthError("");
+  };
+
+  const handleRequestCode = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setAuthError("");
+    setDevLoginCode("");
+
+    try {
+      const response = await apiFetch("/api/auth/code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { devCode?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "验证码发送失败。");
+      }
+      setDevLoginCode(payload.devCode || "");
+      setAuthStep("code");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "验证码发送失败。");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleVerifyLogin = async () => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     setAuthError("");
@@ -311,14 +422,14 @@ function App() {
       const response = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, code: verificationCode }),
       });
       const payload = (await response.json().catch(() => ({}))) as { user?: UserAccount; error?: string };
       if (!response.ok || !payload.user) {
         throw new Error(payload.error || "登录失败。");
       }
       setUser(payload.user);
-      setLoginOpen(false);
+      closeLogin();
       await refreshGenerations();
       if (loginIntent === "generate") {
         setLoginIntent("");
@@ -350,7 +461,7 @@ function App() {
     try {
       if (!user) {
         setLoginIntent("generate");
-        setLoginOpen(true);
+        openLogin();
         return;
       }
 
@@ -376,7 +487,7 @@ function App() {
       }
 
       if (!response.ok) {
-        if (response.status === 401) setLoginOpen(true);
+        if (response.status === 401) openLogin();
         const payload = await response.json().catch(() => ({ error: "生成失败，请稍后重试。" }));
         throw new Error(payload.error || "生成失败，请稍后重试。");
       }
@@ -403,6 +514,13 @@ function App() {
   };
 
   const submitGenerationRequest = async () => {
+    const deliveryPrompt =
+      deliveryMode === "presenting"
+        ? "PPT 用途：给人讲。请强化现场讲述节奏、转场、演讲逻辑和一页一个关键结论。"
+        : "PPT 用途：给人看。请强化自解释结构、摘要结论、信息完整性和可独立阅读的页面层级。";
+    const generationAudience = `${audience}；${deliveryMode === "presenting" ? "现场讲述" : "异步阅读"}`;
+    const generationPrompt = [deliveryPrompt, prompt].filter(Boolean).join("\n\n");
+
     if (source === "ppt" && selectedFile) {
       setGenerationError("正在上传 PPT 文件...");
       const sourceFile = await uploadSourcePptx(selectedFile);
@@ -416,8 +534,8 @@ function App() {
           style,
           slides,
           language,
-          audience,
-          prompt,
+          audience: generationAudience,
+          prompt: generationPrompt,
           sourceFile,
         }),
       });
@@ -429,8 +547,8 @@ function App() {
     formData.append("style", style);
     formData.append("slides", String(slides));
     formData.append("language", language);
-    formData.append("audience", audience);
-    formData.append("prompt", prompt);
+    formData.append("audience", generationAudience);
+    formData.append("prompt", generationPrompt);
 
     return apiFetch("/api/generate-ppt", {
       method: "POST",
@@ -545,7 +663,9 @@ function App() {
 
         <nav className="header-nav" aria-label="主导航">
           <a href="#pricing">价格</a>
-          <a href="#privacy">隐私</a>
+          <button className="nav-link-button" type="button" onClick={() => setLegalPage("privacy")}>
+            隐私
+          </button>
           <div className="language-switcher" aria-label="语言">
             {["EN", "简", "繁", "ES", "日"].map((item) => (
               <button className={item === "简" ? "active" : ""} key={item} type="button">
@@ -562,7 +682,7 @@ function App() {
               </button>
             </div>
           ) : (
-            <button className="ghost-button" type="button" onClick={() => setLoginOpen(true)}>
+            <button className="ghost-button" type="button" onClick={openLogin}>
               <LogIn size={16} />
               登录
             </button>
@@ -597,7 +717,7 @@ function App() {
 
       <section className="generator-section" id="generator" aria-label="PPT 生成器">
         <div className="stepper" aria-label="生成步骤">
-          {["现有内容", "使用场景", "输出设置"].map((label, index) => {
+          {["上传内容", "PPT 用途", "输出设置"].map((label, index) => {
             const number = index + 1;
             return (
               <button
@@ -620,7 +740,7 @@ function App() {
                 <p className="section-kicker">Step {step}</p>
                 <h2>
                   {step === 1 && "你手上现在有什么？"}
-                  {step === 2 && "这份 PPT 要说服谁？"}
+                  {step === 2 && "这份 PPT 是给人讲，还是给人看？"}
                   {step === 3 && "最终希望是什么风格？"}
                 </h2>
               </div>
@@ -632,7 +752,7 @@ function App() {
 
             {step === 1 && (
               <div className="step-body">
-                <div className="option-grid three">
+                <div className="option-grid two source-choice-grid">
                   {sourceOptions.map((item) => (
                     <SelectButton
                       item={item}
@@ -657,7 +777,7 @@ function App() {
                   </label>
                 ) : (
                   <label className="prompt-field">
-                    <span>{source === "outline" ? "粘贴文稿或大纲" : "写下主题"}</span>
+                    <span>粘贴文稿、脚本或大纲</span>
                     <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
                   </label>
                 )}
@@ -673,19 +793,19 @@ function App() {
 
             {step === 2 && (
               <div className="step-body">
-                <div className="option-grid two">
-                  {purposeOptions.map((item) => (
+                <div className="option-grid two purpose-choice-grid">
+                  {deliveryOptions.map((item) => (
                     <SelectButton
                       item={item}
                       key={item.id}
-                      selected={purpose === item.id}
-                      onClick={() => setPurpose(item.id)}
+                      selected={deliveryMode === item.id}
+                      onClick={() => setDeliveryMode(item.id)}
                     />
                   ))}
                 </div>
 
                 <label className="input-field">
-                  <span>目标受众</span>
+                  <span>{deliveryMode === "presenting" ? "现场听众" : "阅读对象"}</span>
                   <input value={audience} onChange={(event) => setAudience(event.target.value)} />
                 </label>
 
@@ -777,7 +897,7 @@ function App() {
             <div className={`deck-canvas ${isGenerating ? "loading" : ""}`}>
               <div className="deck-cover">
                 <span>{styleOptions.find((item) => item.id === style)?.title}</span>
-                <h3>{purposeOptions.find((item) => item.id === purpose)?.title}</h3>
+                <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
                 <p>{language} · {slides} pages</p>
               </div>
               <div className="chart-row">
@@ -917,35 +1037,97 @@ function App() {
       </section>
 
       <footer className="site-footer">
-        <span>DeckPilot AI</span>
+        <div>
+          <span>DeckPilot AI</span>
+          <small>service@deckevo.com</small>
+        </div>
+        <div className="footer-links">
+          <button type="button" onClick={() => setLegalPage("terms")}>
+            Terms
+          </button>
+          <button type="button" onClick={() => setLegalPage("privacy")}>
+            Privacy
+          </button>
+          <button type="button" onClick={() => setLegalPage("refund")}>
+            Refund
+          </button>
+        </div>
         <a href="#top">返回顶部</a>
       </footer>
+
+      {legalPage && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="policy-title">
+          <div className="legal-modal">
+            <button className="icon-button" type="button" onClick={() => setLegalPage(null)} aria-label="关闭">
+              <X size={18} />
+            </button>
+            <p className="section-kicker">DeckPilot AI</p>
+            <h2 id="policy-title">{policyContent[legalPage].title}</h2>
+            <small>{policyContent[legalPage].updated}</small>
+            <div className="policy-sections">
+              {policyContent[legalPage].sections.map((section) => (
+                <section key={section.heading}>
+                  <h3>{section.heading}</h3>
+                  <p>{section.body}</p>
+                </section>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loginOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="login-title">
           <div className="login-modal">
-            <button className="icon-button" type="button" onClick={() => setLoginOpen(false)} aria-label="关闭">
+            <button className="icon-button" type="button" onClick={closeLogin} aria-label="关闭">
               <X size={18} />
             </button>
             <Mail size={24} />
-            <h2 id="login-title">输入邮箱即可试用</h2>
-            <p>无需密码或验证码。邮箱只用于保存生成记录和试用额度。</p>
+            <h2 id="login-title">{authStep === "email" ? "登录 DeckPilot AI" : "输入验证码"}</h2>
+            <p>{authStep === "email" ? "输入邮箱后，我们会发送 6 位验证码，用于保存生成记录和试用额度。" : "验证码 10 分钟内有效。没有收到时可以返回重新发送。"}</p>
             <label>
               <span>邮箱</span>
               <input
                 type="email"
                 placeholder="you@company.com"
                 value={email}
+                disabled={authStep === "code"}
                 onChange={(event) => setEmail(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") void handleLogin();
+                  if (event.key === "Enter") void handleRequestCode();
                 }}
               />
             </label>
+            {authStep === "code" && (
+              <label>
+                <span>验证码</span>
+                <input
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void handleVerifyLogin();
+                  }}
+                />
+              </label>
+            )}
+            {devLoginCode && <p className="dev-code">测试验证码：{devLoginCode}</p>}
             {authError && <p className="error-message">{authError}</p>}
-            <button className="primary-button wide" type="button" onClick={handleLogin} disabled={isLoggingIn}>
-              {isLoggingIn ? "登录中" : "继续"}
+            <button
+              className="primary-button wide"
+              type="button"
+              onClick={authStep === "email" ? handleRequestCode : handleVerifyLogin}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? "处理中" : authStep === "email" ? "发送验证码" : "验证并登录"}
             </button>
+            {authStep === "code" && (
+              <button className="text-button wide" type="button" onClick={() => setAuthStep("email")}>
+                换一个邮箱
+              </button>
+            )}
           </div>
         </div>
       )}

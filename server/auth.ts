@@ -1,6 +1,7 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { supabaseConsumeCredits, supabaseFindUserBySession, supabaseGetUserById, supabaseLogin, supabaseLogout, useSupabaseStore } from "./supabaseStore";
+import { sendLoginCodeEmail } from "./email";
 
 export type UserAccount = {
   id: string;
@@ -19,6 +20,9 @@ type UserRow = {
 
 const cookieName = "deckpilot_session";
 const sessionDays = 30;
+const loginCodeMinutes = 10;
+const maxCodeAttempts = 5;
+const loginCodes = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 
 export function getDefaultCredits() {
   return Number(process.env.FREE_CREDITS || 200);
@@ -61,7 +65,52 @@ export async function requireUser(req: Request, res: Response) {
   return user;
 }
 
-export async function loginWithEmail(email: string, res: Response) {
+export async function requestLoginCode(email: string) {
+  const normalized = normalizeEmail(email);
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  loginCodes.set(normalized, {
+    code,
+    expiresAt: Date.now() + loginCodeMinutes * 60 * 1000,
+    attempts: 0,
+  });
+
+  const delivery = await sendLoginCodeEmail(normalized, code);
+  return {
+    email: normalized,
+    expiresInSeconds: loginCodeMinutes * 60,
+    delivery: delivery.sent ? "email" : "development",
+    devCode: delivery.devCode,
+  };
+}
+
+export async function verifyLoginCode(email: string, code: string, res: Response) {
+  const normalized = normalizeEmail(email);
+  const inputCode = String(code || "").trim();
+  if (!/^\d{6}$/.test(inputCode)) {
+    throw new Error("请输入 6 位验证码。");
+  }
+
+  const record = loginCodes.get(normalized);
+  if (!record || record.expiresAt < Date.now()) {
+    loginCodes.delete(normalized);
+    throw new Error("验证码已过期，请重新获取。");
+  }
+
+  record.attempts += 1;
+  if (record.attempts > maxCodeAttempts) {
+    loginCodes.delete(normalized);
+    throw new Error("验证码尝试次数过多，请重新获取。");
+  }
+
+  if (record.code !== inputCode) {
+    throw new Error("验证码不正确。");
+  }
+
+  loginCodes.delete(normalized);
+  return loginWithEmail(normalized, res);
+}
+
+async function loginWithEmail(email: string, res: Response) {
   const normalized = normalizeEmail(email);
 
   if (useSupabaseStore()) {

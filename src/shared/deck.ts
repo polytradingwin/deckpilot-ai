@@ -1,4 +1,4 @@
-export type SourceType = "ppt" | "outline" | "topic";
+export type SourceType = "ppt" | "outline";
 export type Purpose = "fundraising" | "sales" | "training" | "report";
 export type VisualStyle = "consulting" | "product" | "brand" | "academic";
 export type DeckTemplate = "executiveDark" | "editorialLight" | "dataGrid" | "productNeon" | "warmBoardroom" | "academicPaper";
