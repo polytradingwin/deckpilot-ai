@@ -15,7 +15,8 @@ fi
 APP_DIR="/home/deckpilot/apps/deckpilot-ai"
 ENV_FILE="$APP_DIR/.env.local"
 TMP_DOMAIN="deckpilot.70.34.216.237.sslip.io"
-ORIGINS="https://${DOMAIN},https://www.${DOMAIN},https://${TMP_DOMAIN},https://deckpilot-ai.netlify.app"
+PUBLIC_IP="${PUBLIC_IP:-70.34.216.237}"
+ORIGINS="https://${DOMAIN},https://www.${DOMAIN},https://api.${DOMAIN},https://${TMP_DOMAIN},https://deckpilot-ai.netlify.app"
 
 python3 - "$ENV_FILE" "$ORIGINS" "https://${DOMAIN}" <<'PY'
 import sys
@@ -52,7 +53,7 @@ cat > /etc/nginx/sites-available/deckpilot-ai <<EOF
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN} www.${DOMAIN} ${TMP_DOMAIN};
+    server_name ${DOMAIN} www.${DOMAIN} api.${DOMAIN} ${TMP_DOMAIN};
 
     client_max_body_size 60m;
 
@@ -72,7 +73,22 @@ EOF
 ln -sf /etc/nginx/sites-available/deckpilot-ai /etc/nginx/sites-enabled/deckpilot-ai
 nginx -t
 systemctl reload nginx
-certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
+
+cert_domains=()
+for host in "$DOMAIN" "www.$DOMAIN" "api.$DOMAIN"; do
+  if getent ahostsv4 "$host" | awk '{print $1}' | grep -qx "$PUBLIC_IP"; then
+    cert_domains+=("-d" "$host")
+  else
+    echo "Skipping certificate name ${host}: DNS does not resolve to ${PUBLIC_IP} yet."
+  fi
+done
+
+if [[ "${#cert_domains[@]}" -eq 0 ]]; then
+  echo "No ${DOMAIN} DNS records resolve to ${PUBLIC_IP} yet. Add A records in Cloudflare, then rerun." >&2
+  exit 1
+fi
+
+certbot --nginx "${cert_domains[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect
 systemctl restart deckpilot-ai
 nginx -t
 systemctl reload nginx
