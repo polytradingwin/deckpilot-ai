@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import JSZip from "jszip";
+import { extractTextFromPptx } from "../server/pptxReader";
 
 const apiBase = process.env.API_BASE_URL || "http://127.0.0.1:8787";
 const outDir = path.resolve(process.cwd(), "output/playwright");
@@ -46,6 +47,7 @@ await requestDeck(
   uploadDeckPath,
 );
 await verifyPptx(uploadDeckPath);
+await verifyOutputKeepsSourceAnchors(uploadDeckPath, ["RAG", "权限", "90 天"]);
 
 console.log(`API verification passed:
 - ${textDeckPath}
@@ -180,6 +182,14 @@ async function verifyPptx(filePath: string) {
 
   if (!hasContentTypes || slideCount < 4) {
     throw new Error(`Invalid PPTX output: ${filePath}`);
+  }
+}
+
+async function verifyOutputKeepsSourceAnchors(filePath: string, anchors: string[]) {
+  const extracted = await extractTextFromPptx(await fs.readFile(filePath));
+  const missing = anchors.filter((anchor) => !extracted.text.includes(anchor));
+  if (missing.length) {
+    throw new Error(`Uploaded PPT redesign lost source anchors: ${missing.join(", ")}`);
   }
 }
 

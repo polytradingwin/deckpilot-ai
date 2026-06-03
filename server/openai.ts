@@ -375,9 +375,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "",
     "Requirements:",
     `- Produce exactly ${requestedSlides} slides.`,
-    "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
-    "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
-    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, comparison for tradeoffs, timeline for rollout, matrix for priorities or risk mapping.",
+    ...sourceSpecificRequirements(input),
+    ...structureRequirements(input),
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
@@ -388,6 +387,35 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- The deck must be directly renderable into PowerPoint.",
     "- JSON must be syntactically valid: double-quoted strings, escaped internal quotes, no raw line breaks inside strings, no trailing commas.",
   ].join("\n");
+}
+
+function structureRequirements(input: PresentationRequest) {
+  if (input.source === "ppt") {
+    return [
+      "- Preserve the uploaded deck's page order unless the user explicitly asks for a new order.",
+      "- Use layouts that fit each original slide's purpose; do not force a cover/agenda/executive-summary pattern if the source deck does not support it.",
+      "- For each output slide, transform the corresponding source content into clearer executive language and better visual hierarchy.",
+    ];
+  }
+
+  return [
+    "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
+    "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
+    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, comparison for tradeoffs, timeline for rollout, matrix for priorities or risk mapping.",
+  ];
+}
+
+function sourceSpecificRequirements(input: PresentationRequest) {
+  if (input.source !== "ppt") return [];
+
+  return [
+    "- This is a PPT redesign task, not a new-topic generation task.",
+    "- The uploaded PPT content is the source of truth. Every output slide must be traceable to one or more source slides.",
+    "- Keep the same domain, project names, product names, data points, decisions, risks, and timeline from the uploaded PPT.",
+    "- If the user asks for a different style, change narrative quality and visual structure, not the underlying content.",
+    "- Do not invent a new company, new product, new market, new fundraising story, or unrelated AI/SaaS scenario unless it exists in the uploaded source material.",
+    "- In speaker notes, mention which source slide(s) each output slide is based on.",
+  ];
 }
 
 function getMaxOutputTokens(slides: number) {
@@ -478,17 +506,17 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   const targetCount = clampSlideCount(input.slides);
   const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, targetCount) : [];
 
-  if (slides[0] && slides[0].layout !== "cover") {
+  if (input.source !== "ppt" && slides[0] && slides[0].layout !== "cover") {
     slides[0] = { ...slides[0], layout: "cover" };
   }
 
-  if (targetCount >= 5 && slides[1] && !["agenda", "executiveSummary"].includes(slides[1].layout)) {
+  if (input.source !== "ppt" && targetCount >= 5 && slides[1] && !["agenda", "executiveSummary"].includes(slides[1].layout)) {
     slides[1] = { ...slides[1], layout: "agenda" };
   }
 
   while (slides.length < targetCount) {
     slides.push({
-      layout: fallbackLayout(slides.length, targetCount),
+      layout: input.source === "ppt" ? "content" : fallbackLayout(slides.length, targetCount),
       title: fallbackTitle(input, slides.length),
       body: ["补充核心观点", "完善证据链", "明确下一步行动"],
       takeaway: "该页用于补足完整叙事结构，建议后续用真实业务数据替换占位内容。",

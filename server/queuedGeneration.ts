@@ -58,7 +58,17 @@ async function withUploadedPptxText(input: PresentationRequest, sourceFile: Queu
   const prompt = [
     `Uploaded PowerPoint: ${sourceFile.originalName}`,
     `Extracted source slide count: ${extracted.slideCount}`,
-    "Extracted slide text:",
+    `Slides with extractable text: ${extracted.extractableSlideCount}`,
+    `Extractable text characters: ${extracted.extractableCharCount}`,
+    "",
+    "Source preservation contract:",
+    "- Treat the uploaded PowerPoint as the canonical source material.",
+    "- Preserve the actual subject, entities, facts, section flow, and conclusions from the uploaded deck.",
+    "- If requested slide count equals the source slide count, map output slide N to source slide N unless the user explicitly asks to restructure.",
+    "- If restructuring is needed, merge or split source slides but do not introduce unrelated business scenarios.",
+    "- Do not replace the user's deck with a generic AI, SaaS, fundraising, sales, or consulting template.",
+    "",
+    "Extracted slide-by-slide source material:",
     extracted.text,
     input.prompt ? ["Additional user direction:", input.prompt].join("\n") : "",
   ]
