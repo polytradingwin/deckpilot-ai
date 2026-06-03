@@ -122,15 +122,7 @@ export async function createDeckWithOpenAI(input: PresentationRequest): Promise<
     throw new Error("OPENAI_API_KEY is not set. Add it to .env.local or set MOCK_OPENAI=1 for local testing.");
   }
 
-  const models = getModelCandidates();
-  const response = await createResponseWithFallback(apiKey, models, input);
-  const text = extractOutputText(response);
-
-  if (!text) {
-    throw new Error("OpenAI did not return a structured deck.");
-  }
-
-  return normalizeDeck(JSON.parse(text) as DeckSpec, input);
+  return createDeckWithOpenAIModels(apiKey, getModelCandidates(), input);
 }
 
 export async function createDeckWithAnthropic(input: PresentationRequest): Promise<DeckSpec> {
@@ -146,50 +138,43 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
   }
 
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
-  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": process.env.ANTHROPIC_VERSION || "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: getMaxOutputTokens(input.slides),
-      temperature: 0.4,
-      system: buildSystemPrompt(),
-      messages: [
-        {
-          role: "user",
-          content: `${buildUserPrompt(input)}\n\nReturn only JSON. Do not wrap it in markdown.`,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await formatAnthropicError(response, model));
+  const errors: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await createAnthropicMessage(apiKey, model, input, errors[errors.length - 1]);
+      const text = extractAnthropicText(response);
+      if (!text) {
+        throw new Error("Anthropic did not return a structured deck.");
+      }
+      return normalizeDeck(parseDeckJson(text), input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(message);
+      if (message.includes("ANTHROPIC_API_KEY") || message.includes("API key")) break;
+    }
   }
 
-  const text = extractAnthropicText((await response.json()) as AnthropicResponse);
-  if (!text) {
-    throw new Error("Anthropic did not return a structured deck.");
-  }
-
-  return normalizeDeck(JSON.parse(stripJsonFence(text)) as DeckSpec, input);
+  throw new Error(`Anthropic generation failed.\n${errors.join("\n")}`);
 }
 
-async function createResponseWithFallback(apiKey: string, models: string[], input: PresentationRequest) {
+async function createDeckWithOpenAIModels(apiKey: string, models: string[], input: PresentationRequest) {
   const errors: string[] = [];
 
   for (const model of models) {
-    try {
-      return await createResponse(apiKey, model, input);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${model}: ${message}`);
-      if (message.includes("OPENAI_API_KEY") || message.includes("API Key")) {
-        break;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await createResponse(apiKey, model, input, errors[errors.length - 1]);
+        const text = extractOutputText(response);
+        if (!text) {
+          throw new Error("OpenAI did not return a structured deck.");
+        }
+        return normalizeDeck(parseDeckJson(text), input);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${model}: ${message}`);
+        if (message.includes("OPENAI_API_KEY") || message.includes("API Key")) {
+          break;
+        }
       }
     }
   }
@@ -197,7 +182,7 @@ async function createResponseWithFallback(apiKey: string, models: string[], inpu
   throw new Error(`All OpenAI model candidates failed.\n${errors.join("\n")}`);
 }
 
-async function createResponse(apiKey: string, model: string, input: PresentationRequest): Promise<OpenAIResponse> {
+async function createResponse(apiKey: string, model: string, input: PresentationRequest, previousError?: string): Promise<OpenAIResponse> {
   const response = await fetch(`${process.env.OPENAI_BASE_URL || "https://api.openai.com"}/v1/responses`, {
     method: "POST",
     headers: {
@@ -215,7 +200,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
         },
         {
           role: "user",
-          content: buildUserPrompt(input),
+          content: buildUserPrompt(input, previousError),
         },
       ],
       max_output_tokens: getMaxOutputTokens(input.slides),
@@ -235,6 +220,35 @@ async function createResponse(apiKey: string, model: string, input: Presentation
   }
 
   return (await response.json()) as OpenAIResponse;
+}
+
+async function createAnthropicMessage(apiKey: string, model: string, input: PresentationRequest, previousError?: string) {
+  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": process.env.ANTHROPIC_VERSION || "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: getMaxOutputTokens(input.slides),
+      temperature: previousError ? 0.2 : 0.4,
+      system: buildSystemPrompt(),
+      messages: [
+        {
+          role: "user",
+          content: `${buildUserPrompt(input, previousError)}\n\nReturn only JSON. Do not wrap it in markdown.`,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await formatAnthropicError(response, model));
+  }
+
+  return (await response.json()) as AnthropicResponse;
 }
 
 function buildSystemPrompt() {
@@ -343,10 +357,12 @@ function stripJsonFence(text: string) {
     .trim();
 }
 
-function buildUserPrompt(input: PresentationRequest) {
+function buildUserPrompt(input: PresentationRequest, previousError?: string) {
   const requestedSlides = clampSlideCount(input.slides);
 
   return [
+    previousError ? `Previous generation failed validation: ${previousError}` : "",
+    previousError ? "Regenerate the entire JSON deck. Do not repeat the formatting mistake." : "",
     `Source type: ${input.source}`,
     `Use case: ${input.purpose}`,
     `Visual style: ${input.style}`,
@@ -370,6 +386,7 @@ function buildUserPrompt(input: PresentationRequest) {
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
     "- Speaker notes should explain the presenter talk track in 1 to 3 sentences.",
     "- The deck must be directly renderable into PowerPoint.",
+    "- JSON must be syntactically valid: double-quoted strings, escaped internal quotes, no raw line breaks inside strings, no trailing commas.",
   ].join("\n");
 }
 
@@ -383,7 +400,78 @@ function getMaxOutputTokens(slides: number) {
     return Math.min(6000, Math.max(3500, clampSlideCount(slides) * 550));
   }
 
-  return Math.min(24000, Math.max(6000, clampSlideCount(slides) * 700));
+  return Math.min(32000, Math.max(8000, clampSlideCount(slides) * 950));
+}
+
+function parseDeckJson(text: string) {
+  const candidates = [extractJsonObject(stripJsonFence(text))];
+  candidates.push(escapeControlCharactersInStrings(candidates[0]));
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as DeckSpec;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Model returned invalid JSON.");
+}
+
+function extractJsonObject(text: string) {
+  const trimmed = text.trim();
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    return trimmed.slice(first, last + 1);
+  }
+  return trimmed;
+}
+
+function escapeControlCharactersInStrings(text: string) {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const char of text) {
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      output += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      output += char;
+      continue;
+    }
+
+    if (inString && char === "\n") {
+      output += "\\n";
+      continue;
+    }
+
+    if (inString && char === "\r") {
+      output += "\\r";
+      continue;
+    }
+
+    if (inString && char === "\t") {
+      output += "\\t";
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
 }
 
 function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
