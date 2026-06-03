@@ -7,6 +7,7 @@ import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession }
 import { createSignedPptxUpload, savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
+import { withUploadedPptxText } from "./queuedGeneration";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
 import type { PresentationRequest } from "../src/shared/deck";
@@ -210,7 +211,8 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       return;
     }
 
-    const { deck, file, filename, asciiFilename, record, updatedUser } = await generateAndSaveDeck(user.id, input);
+    const generationInput = signedSourceFile ? await withUploadedPptxText(input, signedSourceFile) : input;
+    const { deck, file, filename, asciiFilename, record, updatedUser } = await generateAndSaveDeck(user.id, generationInput);
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader(

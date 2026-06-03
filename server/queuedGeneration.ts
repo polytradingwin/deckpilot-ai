@@ -52,7 +52,7 @@ export async function runQueuedGeneration(payload: ValidQueuedGenerationPayload)
   }
 }
 
-async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {
+export async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {
   const file = await readPptxFile(sourceFile.storedFilename);
   const extracted = await extractTextFromPptx(file);
   const sourceAnchors = extractSourceAnchors(extracted.text);
