@@ -22,6 +22,11 @@ const deckSchema = {
       properties: {
         accent: { type: "string", enum: ["gold", "cyan", "sage"] },
         mood: { type: "string" },
+        template: {
+          type: "string",
+          enum: ["executiveDark", "editorialLight", "dataGrid", "productNeon", "warmBoardroom", "academicPaper"],
+        },
+        density: { type: "string", enum: ["calm", "balanced", "dense"] },
       },
     },
     slides: {
@@ -262,6 +267,7 @@ function buildSystemPrompt() {
       "Create a concise, business-ready PowerPoint outline with strong narrative structure.",
       "Return only valid JSON that matches the supplied schema.",
       "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
+      "Choose a visual template that fits the user's material instead of reusing the same look for every deck.",
     ].join("\n");
   }
 
@@ -270,6 +276,7 @@ function buildSystemPrompt() {
     "Build board-ready PowerPoint decks with a clear storyline, MECE structure, crisp slide titles, evidence-first claims, and executive-level language.",
     "Every slide title must be a message sentence, not a topic label.",
     "A strong deck should feel like a finished consultant/business presentation, not a generic AI outline.",
+    "Select a distinct visual template based on the content, audience, and style request. Do not default to the same template every time.",
     "Use a narrative spine: situation, complication, insight, recommendation, proof, rollout, risks, decision.",
     "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
     "Design for editable PowerPoint: short text, strong hierarchy, one key message per slide, and layouts that can be rendered as shapes, text, and simple charts.",
@@ -371,6 +378,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     `Use case: ${input.purpose}`,
     `Visual style: ${input.style}`,
     `Style guidance: ${styleGuidance(input.style)}`,
+    `Template guidance: ${templateGuidance(input.style)}`,
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
@@ -388,6 +396,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Add a short takeaway to most non-cover slides.",
     "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
+    "- Set theme.template to the best visual system for the material: executiveDark, editorialLight, dataGrid, productNeon, warmBoardroom, or academicPaper.",
+    "- Vary the template, accent, density, and layout mix according to the user's content; avoid making unrelated decks look identical.",
     "- Speaker notes should explain the presenter talk track in 1 to 3 sentences.",
     "- The deck must be directly renderable into PowerPoint.",
     "- JSON must be syntactically valid: double-quoted strings, escaped internal quotes, no raw line breaks inside strings, no trailing commas.",
@@ -395,11 +405,11 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
 }
 
 function requiredAnchorPrompt(input: PresentationRequest) {
-  const anchors = extractRequiredSourceAnchors(input);
+  const anchors = input.sourceAnchors?.length ? input.sourceAnchors.slice(0, 16) : extractRequiredSourceAnchors(input);
   if (!anchors.length) return [];
   return [
-    `Required source anchors to preserve exactly: ${anchors.join(", ")}`,
-    "These anchors come from the uploaded PPT. Keep them in the generated slide titles, body, metrics, or speaker notes unless the user explicitly asks to remove them.",
+    `Required content anchors to preserve exactly: ${anchors.join(", ")}`,
+    "These anchors are important facts or terms from the user's material. Keep them in slide titles, body, metrics, or speaker notes unless the user explicitly asks to remove them.",
   ];
 }
 
@@ -446,8 +456,8 @@ function getMaxOutputTokens(slides: number) {
 }
 
 function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
-  if (input.source !== "ppt") return;
-  const anchors = extractRequiredSourceAnchors(input);
+  if (input.source !== "ppt" && !input.sourceAnchors?.length) return;
+  const anchors = input.sourceAnchors?.length ? input.sourceAnchors.slice(0, 16) : extractRequiredSourceAnchors(input);
   if (!anchors.length) return;
 
   const deckText = [
@@ -478,7 +488,6 @@ function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
 }
 
 function extractRequiredSourceAnchors(input: PresentationRequest) {
-  if (input.source !== "ppt") return [];
   if (input.sourceAnchors?.length) return input.sourceAnchors.slice(0, 16);
   const text = input.prompt || "";
   const anchors = new Set<string>();
@@ -593,9 +602,29 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     subtitle: deck.subtitle || "AI-generated presentation",
     language: deck.language || input.language,
     audience: deck.audience || input.audience,
-    theme: deck.theme || { accent: "gold", mood: input.style },
+    theme: normalizeTheme(deck.theme, input),
     slides,
   };
+}
+
+function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: PresentationRequest): DeckSpec["theme"] {
+  const accent = theme?.accent || (input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold");
+  const template = theme?.template || defaultTemplate(input);
+  const density = theme?.density || (input.slides >= 16 ? "dense" : input.slides <= 6 ? "calm" : "balanced");
+  return {
+    accent,
+    mood: theme?.mood || input.style,
+    template,
+    density,
+  };
+}
+
+function defaultTemplate(input: PresentationRequest): DeckSpec["theme"]["template"] {
+  if (input.style === "product") return input.purpose === "report" ? "dataGrid" : "productNeon";
+  if (input.style === "brand") return "editorialLight";
+  if (input.style === "academic") return "academicPaper";
+  if (input.purpose === "fundraising") return "warmBoardroom";
+  return "executiveDark";
 }
 
 function fallbackLayout(index: number, total: number): DeckSpec["slides"][number]["layout"] {
@@ -615,6 +644,20 @@ function styleGuidance(style: PresentationRequest["style"]) {
     product: "product narrative, capability modules, workflow diagrams, adoption path, proof points and user value",
     brand: "launch story, visual hooks, emotional positioning, audience promise, campaign-ready phrasing",
     academic: "definition, method, evidence chain, limitations, conclusion, rigorous but readable argument",
+  };
+  return guidance[style];
+}
+
+function templateGuidance(style: PresentationRequest["style"]) {
+  const guidance: Record<PresentationRequest["style"], string> = {
+    consulting:
+      "Prefer executiveDark, warmBoardroom, or dataGrid. Use restrained contrast, strong message titles, precise tables, KPI cards, and decision-ready hierarchy.",
+    product:
+      "Prefer productNeon or dataGrid. Use modular product panels, workflow diagrams, roadmap strips, integration maps, and crisp product proof points.",
+    brand:
+      "Prefer editorialLight or warmBoardroom. Use bolder cover rhythm, campaign-style section breaks, expressive but editable shapes, and strong one-line positioning.",
+    academic:
+      "Prefer academicPaper or editorialLight. Use paper-like whitespace, method/evidence structure, annotated matrices, and careful conclusions.",
   };
   return guidance[style];
 }
@@ -715,7 +758,7 @@ function createMockDeck(input: PresentationRequest): DeckSpec {
     subtitle: "Generated by DeckPilot AI",
     language: input.language,
     audience: input.audience,
-    theme: { accent: input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold", mood: input.style },
+    theme: normalizeTheme({ accent: input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold", mood: input.style }, input),
     slides: baseSlides.slice(0, requestedSlides),
   };
 }

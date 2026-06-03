@@ -1,6 +1,7 @@
 export type SourceType = "ppt" | "outline" | "topic";
 export type Purpose = "fundraising" | "sales" | "training" | "report";
 export type VisualStyle = "consulting" | "product" | "brand" | "academic";
+export type DeckTemplate = "executiveDark" | "editorialLight" | "dataGrid" | "productNeon" | "warmBoardroom" | "academicPaper";
 
 export type PresentationRequest = {
   source: SourceType;
@@ -21,6 +22,8 @@ export type DeckSpec = {
   theme: {
     accent: "gold" | "cyan" | "sage";
     mood: string;
+    template?: DeckTemplate;
+    density?: "calm" | "balanced" | "dense";
   };
   slides: DeckSlide[];
 };

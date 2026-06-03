@@ -1,23 +1,89 @@
 ﻿// @ts-expect-error The local CJS wrapper forces Netlify to use pptxgenjs' require export.
 import PptxGenJSModule from "./pptxgenjs.cjs";
 import type PptxGenJS from "pptxgenjs";
-import type { DeckSlide, DeckSpec } from "../src/shared/deck";
+import type { DeckSlide, DeckSpec, DeckTemplate } from "../src/shared/deck";
 
 const PptxGen = ((PptxGenJSModule as unknown as { default?: typeof PptxGenJS }).default || PptxGenJSModule) as typeof PptxGenJS;
 
-const colors = {
-  bg: "08090B",
-  panel: "121318",
-  panel2: "1B1E24",
-  text: "F5F2EC",
-  muted: "A3A8AE",
-  gold: "D7B981",
-  cyan: "A7C8CA",
-  sage: "A9B994",
-  line: "2C3038",
-};
+const palettes = {
+  executiveDark: {
+    bg: "08090B",
+    panel: "121318",
+    panel2: "1B1E24",
+    text: "F5F2EC",
+    muted: "A3A8AE",
+    gold: "D7B981",
+    cyan: "A7C8CA",
+    sage: "A9B994",
+    line: "2C3038",
+  },
+  editorialLight: {
+    bg: "F7F3EA",
+    panel: "FFFCF6",
+    panel2: "EFE7D9",
+    text: "171512",
+    muted: "716B61",
+    gold: "B98B49",
+    cyan: "4E8791",
+    sage: "697D52",
+    line: "D7CCBA",
+  },
+  dataGrid: {
+    bg: "091018",
+    panel: "101B26",
+    panel2: "172635",
+    text: "EEF7F8",
+    muted: "8FA2AA",
+    gold: "CDAA70",
+    cyan: "69C4D0",
+    sage: "8FB989",
+    line: "26394A",
+  },
+  productNeon: {
+    bg: "070A12",
+    panel: "101522",
+    panel2: "182033",
+    text: "F4F7FF",
+    muted: "97A5BD",
+    gold: "E2BE75",
+    cyan: "70D6E5",
+    sage: "9CCE8E",
+    line: "29334D",
+  },
+  warmBoardroom: {
+    bg: "17130F",
+    panel: "221D18",
+    panel2: "2D251E",
+    text: "FFF7EC",
+    muted: "B4A89B",
+    gold: "D6A85F",
+    cyan: "8FBCC0",
+    sage: "A7B278",
+    line: "45382A",
+  },
+  academicPaper: {
+    bg: "FAF7F0",
+    panel: "FFFDF8",
+    panel2: "ECE8DD",
+    text: "20231D",
+    muted: "62685D",
+    gold: "A98647",
+    cyan: "557F87",
+    sage: "647A56",
+    line: "D2D0C6",
+  },
+} satisfies Record<DeckTemplate, Record<"bg" | "panel" | "panel2" | "text" | "muted" | "gold" | "cyan" | "sage" | "line", string>>;
 
-type Accent = keyof Pick<typeof colors, "gold" | "cyan" | "sage">;
+let colors = palettes.executiveDark;
+
+const templateByStyle = {
+  consulting: "executiveDark",
+  product: "productNeon",
+  brand: "editorialLight",
+  academic: "academicPaper",
+} as const satisfies Record<string, DeckTemplate>;
+
+type Accent = "gold" | "cyan" | "sage";
 
 export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   const pptx = new PptxGen();
@@ -33,11 +99,13 @@ export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   pptx.defineLayout({ name: "LAYOUT_WIDE", width: 13.333, height: 7.5 });
 
   const accent = (deck.theme?.accent || "gold") as Accent;
+  const template = resolveTemplate(deck);
+  colors = palettes[template];
 
   deck.slides.forEach((slide, index) => {
     const page = pptx.addSlide();
-    paintBackground(page, accent, index);
-    renderSlide(page, slide, index, deck.slides.length, accent);
+    paintBackground(page, accent, index, template);
+    renderSlide(page, slide, index, deck.slides.length, accent, template);
     if (slide.speakerNotes) page.addNotes(slide.speakerNotes);
   });
 
@@ -45,7 +113,14 @@ export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   return Buffer.from(arrayBuffer as ArrayBuffer);
 }
 
-function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number) {
+function resolveTemplate(deck: DeckSpec): DeckTemplate {
+  const requested = deck.theme?.template;
+  if (requested && requested in palettes) return requested;
+  const fromMood = templateByStyle[(deck.theme?.mood || "") as keyof typeof templateByStyle];
+  return fromMood || "executiveDark";
+}
+
+function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, template: DeckTemplate) {
   page.background = { color: colors.bg };
   page.addShape("rect", {
     x: 0,
@@ -55,6 +130,93 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number) {
     fill: { color: colors.bg },
     line: { color: colors.bg },
   });
+
+  if (template === "editorialLight" || template === "academicPaper") {
+    page.addShape("rect", {
+      x: 0,
+      y: 0,
+      w: template === "academicPaper" ? 0.18 : 0.42,
+      h: 7.5,
+      fill: { color: colors[accent], transparency: template === "academicPaper" ? 32 : 0 },
+      line: { color: colors[accent], transparency: 100 },
+    });
+    page.addShape("line", {
+      x: 0.72,
+      y: 0.88,
+      w: 11.9,
+      h: 0,
+      line: { color: colors.line, transparency: 0, width: 0.8 },
+    });
+    return;
+  }
+
+  if (template === "dataGrid") {
+    for (let x = 0.8; x < 12.6; x += 1.3) {
+      page.addShape("line", {
+        x,
+        y: 0.95,
+        w: 0,
+        h: 5.7,
+        line: { color: colors.line, transparency: 58, width: 0.35 },
+      });
+    }
+    for (let y = 1.15; y < 6.5; y += 0.82) {
+      page.addShape("line", {
+        x: 0.72,
+        y,
+        w: 11.9,
+        h: 0,
+        line: { color: colors.line, transparency: 60, width: 0.35 },
+      });
+    }
+    page.addShape("rect", {
+      x: 10.55,
+      y: 0,
+      w: 2.78,
+      h: 7.5,
+      fill: { color: colors.panel2, transparency: 16 },
+      line: { color: colors.panel2, transparency: 100 },
+    });
+    return;
+  }
+
+  if (template === "warmBoardroom") {
+    page.addShape("rect", {
+      x: 0,
+      y: 5.72,
+      w: 13.333,
+      h: 1.02,
+      fill: { color: colors[accent], transparency: 78 },
+      line: { color: colors[accent], transparency: 100 },
+    });
+    page.addShape("line", {
+      x: 0.74,
+      y: 1,
+      w: 11.9,
+      h: 0,
+      line: { color: colors[accent], transparency: 32, width: 1.1 },
+    });
+    return;
+  }
+
+  if (template === "productNeon") {
+    page.addShape("rect", {
+      x: 8.85,
+      y: 0.82,
+      w: 3.2,
+      h: 5.75,
+      fill: { color: colors.panel2, transparency: 30 },
+      line: { color: colors.cyan, transparency: 72, width: 1 },
+    });
+    page.addShape("line", {
+      x: 0.65,
+      y: 6.75,
+      w: 11.8,
+      h: -4.9,
+      line: { color: colors[accent], transparency: 68, width: 1.2 },
+    });
+  }
+
   page.addShape("arc", {
     x: index % 2 === 0 ? 9.4 : -1.2,
     y: -0.8,
@@ -73,11 +235,11 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number) {
   });
 }
 
-function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent) {
+function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent, template: DeckTemplate) {
   addHeader(page, slide, index, total, accent);
 
   if (slide.layout === "cover") {
-    renderCover(page, slide, accent);
+    renderCover(page, slide, accent, template);
     return;
   }
 
@@ -87,7 +249,7 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
   }
 
   if (slide.layout === "section") {
-    renderSection(page, slide, accent);
+    renderSection(page, slide, accent, template);
     return;
   }
 
@@ -121,7 +283,7 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
-  renderContent(page, slide, accent);
+  renderContent(page, slide, accent, template);
 }
 
 function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent) {
@@ -150,7 +312,99 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
   });
 }
 
-function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  if (template === "editorialLight") {
+    page.addText(slide.kicker || "DeckPilot AI", {
+      x: 0.82,
+      y: 1.02,
+      w: 2.8,
+      h: 0.24,
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(slide.title, {
+      x: 0.82,
+      y: 1.56,
+      w: 7.15,
+      h: 1.72,
+      fit: "shrink",
+      fontFace: "Aptos Display",
+      fontSize: 39,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    page.addText(slide.subtitle || "", {
+      x: 0.86,
+      y: 3.48,
+      w: 6.05,
+      h: 0.48,
+      fit: "shrink",
+      fontSize: 13,
+      color: colors.muted,
+      margin: 0,
+    });
+    page.addShape("rect", {
+      x: 8.4,
+      y: 1.2,
+      w: 3.75,
+      h: 4.65,
+      fill: { color: colors.panel2, transparency: 0 },
+      line: { color: colors.line, transparency: 0 },
+    });
+    addBulletPanel(page, slide.body || [], 8.78, 2.0, 2.72, accent);
+    return;
+  }
+
+  if (template === "academicPaper") {
+    page.addText(slide.title, {
+      x: 1.28,
+      y: 1.68,
+      w: 10.05,
+      h: 1.42,
+      fit: "shrink",
+      fontFace: "Aptos Display",
+      fontSize: 34,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+      align: "center",
+    });
+    page.addShape("line", {
+      x: 3.8,
+      y: 3.32,
+      w: 5.7,
+      h: 0,
+      line: { color: colors[accent], transparency: 0, width: 1 },
+    });
+    page.addText(slide.subtitle || "", {
+      x: 2.35,
+      y: 3.62,
+      w: 8.8,
+      h: 0.44,
+      fit: "shrink",
+      fontSize: 13,
+      color: colors.muted,
+      margin: 0,
+      align: "center",
+    });
+    addBulletPanel(page, slide.body || [], 3.36, 4.55, 5.75, accent);
+    return;
+  }
+
+  if (template === "productNeon" || template === "dataGrid") {
+    page.addShape("rect", {
+      x: 0.78,
+      y: 1.0,
+      w: 0.13,
+      h: 4.75,
+      fill: { color: colors[accent] },
+      line: { color: colors[accent] },
+    });
+  }
+
   page.addText(slide.title, {
     x: 0.72,
     y: 1.55,
@@ -205,7 +459,37 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   });
 }
 
-function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  if (template === "editorialLight" || template === "academicPaper") {
+    page.addText(slide.title, {
+      x: 0.86,
+      y: 1.16,
+      w: 10.4,
+      h: 0.76,
+      fit: "shrink",
+      fontFace: "Aptos Display",
+      fontSize: template === "academicPaper" ? 24 : 27,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    if (slide.subtitle) {
+      page.addText(slide.subtitle, {
+        x: 0.88,
+        y: 2.0,
+        w: 8.4,
+        h: 0.34,
+        fontSize: 11,
+        color: colors.muted,
+        margin: 0,
+      });
+    }
+    addBulletPanel(page, slide.body || [], 0.92, 2.72, 6.2, accent);
+    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
+    addTakeaway(page, slide.takeaway, accent);
+    return;
+  }
+
   page.addText(slide.title, {
     x: 0.72,
     y: 1.05,
@@ -323,7 +607,51 @@ function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   addTakeaway(page, slide.takeaway || "A clear narrative map keeps the audience oriented before the evidence deep-dive.", accent);
 }
 
-function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  if (template === "editorialLight" || template === "academicPaper") {
+    page.addShape("rect", {
+      x: 0.86,
+      y: 1.2,
+      w: 11.4,
+      h: 4.6,
+      fill: { color: colors.panel, transparency: template === "academicPaper" ? 2 : 0 },
+      line: { color: colors.line, transparency: 0 },
+    });
+    page.addText(slide.kicker || "Section", {
+      x: 1.28,
+      y: 1.72,
+      w: 2.6,
+      h: 0.24,
+      fontSize: 9,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(slide.title, {
+      x: 1.26,
+      y: 2.25,
+      w: 8.8,
+      h: 1.18,
+      fit: "shrink",
+      fontFace: "Aptos Display",
+      fontSize: 31,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    page.addText(slide.subtitle || slide.takeaway || "", {
+      x: 1.3,
+      y: 3.72,
+      w: 7.3,
+      h: 0.48,
+      fit: "shrink",
+      fontSize: 13,
+      color: colors.muted,
+      margin: 0,
+    });
+    return;
+  }
+
   page.addShape("rect", {
     x: 0.78,
     y: 1.35,
