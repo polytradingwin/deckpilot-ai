@@ -479,16 +479,17 @@ function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
 
 function extractRequiredSourceAnchors(input: PresentationRequest) {
   if (input.source !== "ppt") return [];
+  if (input.sourceAnchors?.length) return input.sourceAnchors.slice(0, 16);
   const text = input.prompt || "";
   const anchors = new Set<string>();
 
-  for (const match of text.matchAll(/\b(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)\b/g)) {
+  for (const match of text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
     anchors.add(match[0]);
   }
-  for (const match of text.matchAll(/\b\d+\s*(?:天|周|个月|月|年|days?|weeks?|months?|years?)\b/gi)) {
+  for (const match of text.matchAll(/\d+\s*(?:天|周|个月|月|年)/g)) {
     anchors.add(match[0].replace(/\s+/g, " "));
   }
-  for (const match of text.matchAll(/\b\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年|days?|weeks?|months?|years?)\b/gi)) {
+  for (const match of text.matchAll(/\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年)/g)) {
     anchors.add(match[0].replace(/\s+/g, " "));
   }
 

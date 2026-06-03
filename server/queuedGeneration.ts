@@ -55,11 +55,13 @@ export async function runQueuedGeneration(payload: ValidQueuedGenerationPayload)
 async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile): Promise<PresentationRequest> {
   const file = await readPptxFile(sourceFile.storedFilename);
   const extracted = await extractTextFromPptx(file);
+  const sourceAnchors = extractSourceAnchors(extracted.text);
   const prompt = [
     `Uploaded PowerPoint: ${sourceFile.originalName}`,
     `Extracted source slide count: ${extracted.slideCount}`,
     `Slides with extractable text: ${extracted.extractableSlideCount}`,
     `Extractable text characters: ${extracted.extractableCharCount}`,
+    `Required source anchors to preserve exactly: ${sourceAnchors.join(", ") || "(none)"}`,
     "",
     "Source preservation contract:",
     "- Treat the uploaded PowerPoint as the canonical source material.",
@@ -75,5 +77,19 @@ async function withUploadedPptxText(input: PresentationRequest, sourceFile: Queu
     .filter(Boolean)
     .join("\n\n");
 
-  return { ...input, prompt };
+  return { ...input, prompt, sourceAnchors };
+}
+
+function extractSourceAnchors(text: string) {
+  const anchors = new Set<string>();
+  for (const match of text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
+    anchors.add(match[0]);
+  }
+  for (const match of text.matchAll(/\d+\s*(?:天|周|个月|月|年)/g)) {
+    anchors.add(match[0].replace(/\s+/g, " "));
+  }
+  for (const match of text.matchAll(/\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年)/g)) {
+    anchors.add(match[0].replace(/\s+/g, " "));
+  }
+  return Array.from(anchors).slice(0, 16);
 }

@@ -30,6 +30,7 @@ await verifyPptx(textDeckPath);
 await verifyHistoryDownload(path.join(outDir, "verify-history-download.pptx"));
 
 const uploaded = await fs.readFile(textDeckPath);
+const sourceAnchors = await pickSourceAnchors(uploaded);
 const sourceFile = await uploadSourcePptx(uploaded, "source.pptx");
 
 await requestDeck(
@@ -47,7 +48,7 @@ await requestDeck(
   uploadDeckPath,
 );
 await verifyPptx(uploadDeckPath);
-await verifyOutputKeepsSourceAnchors(uploadDeckPath, ["RAG", "权限", "90 天"]);
+await verifyOutputKeepsSourceAnchors(uploadDeckPath, sourceAnchors);
 
 console.log(`API verification passed:
 - ${textDeckPath}
@@ -191,6 +192,21 @@ async function verifyOutputKeepsSourceAnchors(filePath: string, anchors: string[
   if (missing.length) {
     throw new Error(`Uploaded PPT redesign lost source anchors: ${missing.join(", ")}`);
   }
+}
+
+async function pickSourceAnchors(buffer: Buffer) {
+  const extracted = await extractTextFromPptx(buffer);
+  const anchors = new Set<string>();
+  for (const match of extracted.text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
+    anchors.add(match[0]);
+  }
+  if (extracted.text.includes("权限")) anchors.add("权限");
+  if (extracted.text.includes("安全")) anchors.add("安全");
+  const picked = Array.from(anchors).slice(0, 4);
+  if (!picked.length) {
+    throw new Error("Source PPT did not contain stable anchors for content verification.");
+  }
+  return picked;
 }
 
 async function verifyHistoryDownload(outPath: string) {

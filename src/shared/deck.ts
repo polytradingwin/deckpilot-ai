@@ -10,6 +10,7 @@ export type PresentationRequest = {
   language: string;
   audience: string;
   prompt: string;
+  sourceAnchors?: string[];
 };
 
 export type DeckSpec = {
