@@ -345,20 +345,7 @@ function App() {
         throw new Error("请先上传一个 .pptx 文件。");
       }
 
-      const formData = new FormData();
-      formData.append("source", source);
-      formData.append("purpose", purpose);
-      formData.append("style", style);
-      formData.append("slides", String(slides));
-      formData.append("language", language);
-      formData.append("audience", audience);
-      formData.append("prompt", prompt);
-      if (selectedFile) formData.append("file", selectedFile);
-
-      const response = await fetch("/api/generate-ppt", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await submitGenerationRequest();
 
       if (response.status === 202) {
         const payload = (await response.json().catch(() => null)) as { id?: string } | null;
@@ -400,6 +387,85 @@ function App() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const submitGenerationRequest = async () => {
+    if (source === "ppt" && selectedFile) {
+      setGenerationError("正在上传 PPT 文件...");
+      const sourceFile = await uploadSourcePptx(selectedFile);
+      setGenerationError("正在后台生成，请稍候...");
+      return fetch("/api/generate-ppt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source,
+          purpose,
+          style,
+          slides,
+          language,
+          audience,
+          prompt,
+          sourceFile,
+        }),
+      });
+    }
+
+    const formData = new FormData();
+    formData.append("source", source);
+    formData.append("purpose", purpose);
+    formData.append("style", style);
+    formData.append("slides", String(slides));
+    formData.append("language", language);
+    formData.append("audience", audience);
+    formData.append("prompt", prompt);
+
+    return fetch("/api/generate-ppt", {
+      method: "POST",
+      body: formData,
+    });
+  };
+
+  const uploadSourcePptx = async (file: File) => {
+    if (file.size > 50 * 1024 * 1024) {
+      throw new Error("PPT 文件不能超过 50MB。");
+    }
+
+    const signed = await fetch("/api/uploads/pptx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        size: file.size,
+        contentType: file.type || "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      }),
+    });
+
+    const payload = (await signed.json().catch(() => ({}))) as {
+      uploadUrl?: string;
+      storedFilename?: string;
+      originalName?: string;
+      error?: string;
+    };
+    if (!signed.ok || !payload.uploadUrl || !payload.storedFilename) {
+      throw new Error(payload.error || "创建上传地址失败，请稍后重试。");
+    }
+
+    const uploaded = await fetch(payload.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      },
+      body: file,
+    });
+
+    if (!uploaded.ok) {
+      throw new Error("PPT 文件上传失败，请稍后重试。");
+    }
+
+    return {
+      storedFilename: payload.storedFilename,
+      originalName: payload.originalName || file.name,
+    };
   };
 
   const waitForQueuedGeneration = async (id: string) => {

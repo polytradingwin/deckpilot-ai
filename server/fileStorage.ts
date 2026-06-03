@@ -27,6 +27,37 @@ export function getLocalPptxPath(storedFilename: string) {
   return path.join(storeDir, storedFilename);
 }
 
+export async function createSignedPptxUpload(storedFilename: string) {
+  if (!useSupabaseStore()) {
+    throw new Error("Signed uploads require Supabase storage.");
+  }
+
+  const response = await fetch(`${getSupabaseUrl()}/storage/v1/object/upload/sign/${bucketName}/${storedFilename}`, {
+    method: "POST",
+    headers: {
+      apikey: getSupabaseAnonKey(),
+      Authorization: `Bearer ${getSupabaseAnonKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: 600 }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supabase signed upload failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as { url?: string; token?: string };
+  if (!payload.url) {
+    throw new Error("Supabase did not return a signed upload URL.");
+  }
+
+  return {
+    uploadUrl: `${getSupabaseUrl()}/storage/v1${payload.url}`,
+    storedFilename,
+    expiresIn: 600,
+  };
+}
+
 async function uploadToSupabaseStorage(storedFilename: string, file: Buffer) {
   const response = await fetch(`${getSupabaseUrl()}/storage/v1/object/${bucketName}/${storedFilename}`, {
     method: "POST",

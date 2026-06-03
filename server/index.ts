@@ -4,7 +4,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getCreditCost, loginWithEmail, logout, requireUser, findUserBySession } from "./auth";
-import { savePptxFile } from "./fileStorage";
+import { createSignedPptxUpload, savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
@@ -114,12 +114,47 @@ app.get("/api/generations/:id/download", async (req, res) => {
   res.sendFile(generation.filePath);
 });
 
+app.post("/api/uploads/pptx", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const originalName = String(req.body?.filename || "source.pptx").trim();
+    const contentType = String(req.body?.contentType || "");
+    const size = Number(req.body?.size || 0);
+    if (!originalName.toLowerCase().endsWith(".pptx")) {
+      res.status(400).json({ error: "只支持上传 .pptx 文件。" });
+      return;
+    }
+    if (contentType && contentType !== "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+      res.status(400).json({ error: "只支持上传 .pptx 文件。" });
+      return;
+    }
+    if (!Number.isFinite(size) || size <= 0 || size > 50 * 1024 * 1024) {
+      res.status(400).json({ error: "PPT 文件大小需要在 50MB 以内。" });
+      return;
+    }
+
+    const storedFilename = `sources/${user.id}/${randomUUID()}.pptx`;
+    const signed = await createSignedPptxUpload(storedFilename);
+    res.json({ ...signed, originalName });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "创建上传地址失败。";
+    console.error(error);
+    res.status(400).json({ error: message });
+  }
+});
+
 app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
   try {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const requestedInput = await validateRequest(req.body, req.file, { extractUploadedPptx: !isNetlifyRuntime });
+    const signedSourceFile = parseSignedSourceFile(user.id, req.body);
+    const requestedInput = await validateRequest(req.body, req.file, {
+      extractUploadedPptx: !isNetlifyRuntime,
+      sourceFileProvided: Boolean(signedSourceFile),
+    });
     const maxSlides = getRuntimeMaxSlides();
     const input = requestedInput.slides > maxSlides ? { ...requestedInput, slides: maxSlides } : requestedInput;
     const creditCost = getCreditCost(input.slides);
@@ -134,12 +169,14 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     if (isQueuedGenerationRuntime()) {
       const jobId = randomUUID();
       const uploadedFile = req.file;
-      const sourceFile = uploadedFile
-        ? {
+      const sourceFile =
+        signedSourceFile ||
+        (uploadedFile
+          ? {
             storedFilename: `source-${randomUUID()}.pptx`,
             originalName: uploadedFile.originalname,
           }
-        : null;
+          : null);
 
       if (sourceFile && uploadedFile) {
         await savePptxFile(sourceFile.storedFilename, uploadedFile.buffer);
@@ -224,7 +261,7 @@ export default app;
 async function validateRequest(
   body: Partial<PresentationRequest>,
   file?: Express.Multer.File,
-  options: { extractUploadedPptx?: boolean } = { extractUploadedPptx: true },
+  options: { extractUploadedPptx?: boolean; sourceFileProvided?: boolean } = { extractUploadedPptx: true },
 ): Promise<PresentationRequest> {
   const source = parseEnum(body.source, ["ppt", "outline", "topic"], "source");
   const purpose = parseEnum(body.purpose, ["fundraising", "sales", "training", "report"], "purpose");
@@ -245,7 +282,7 @@ async function validateRequest(
       .join("\n\n");
   }
 
-  if (source === "ppt" && !file && prompt.length < 8) {
+  if (source === "ppt" && !file && !options.sourceFileProvided && prompt.length < 8) {
     throw new Error("Please upload a .pptx file or provide source text to redesign.");
   }
 
@@ -262,6 +299,33 @@ async function validateRequest(
     audience: String(body.audience || "高管 / 客户决策层"),
     prompt,
   };
+}
+
+function parseSignedSourceFile(userId: string, body: Record<string, unknown>) {
+  const raw = body.sourceFile;
+  if (!raw) return null;
+
+  const sourceFile = typeof raw === "string" ? safeJsonParse(raw) : raw;
+  if (!sourceFile || typeof sourceFile !== "object") {
+    throw new Error("Invalid uploaded source file reference.");
+  }
+
+  const storedFilename = String((sourceFile as { storedFilename?: unknown }).storedFilename || "");
+  const originalName = String((sourceFile as { originalName?: unknown }).originalName || "source.pptx");
+  const expectedPrefix = `sources/${userId}/`;
+  if (!storedFilename.startsWith(expectedPrefix) || !storedFilename.endsWith(".pptx")) {
+    throw new Error("Invalid uploaded source file reference.");
+  }
+
+  return { storedFilename, originalName };
+}
+
+function safeJsonParse(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    throw new Error("Invalid uploaded source file reference.");
+  }
 }
 
 function parseEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T {

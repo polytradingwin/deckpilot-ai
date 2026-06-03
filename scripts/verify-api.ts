@@ -29,23 +29,22 @@ await verifyPptx(textDeckPath);
 await verifyHistoryDownload(path.join(outDir, "verify-history-download.pptx"));
 
 const uploaded = await fs.readFile(textDeckPath);
-const form = new FormData();
-form.append("source", "ppt");
-form.append("purpose", "report");
-form.append("style", "product");
-form.append("slides", "5");
-form.append("language", "简体中文");
-form.append("audience", "CEO / 管理层");
-form.append("prompt", "请把旧稿改成管理层汇报版本。");
-form.append(
-  "file",
-  new Blob([new Uint8Array(uploaded)], {
-    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  }),
-  "source.pptx",
-);
+const sourceFile = await uploadSourcePptx(uploaded, "source.pptx");
 
-await requestDeck(`${apiBase}/api/generate-ppt`, form, uploadDeckPath);
+await requestDeck(
+  `${apiBase}/api/generate-ppt`,
+  {
+    source: "ppt",
+    purpose: "report",
+    style: "product",
+    slides: "5",
+    language: "简体中文",
+    audience: "CEO / 管理层",
+    prompt: "请把旧稿改成管理层汇报版本。",
+    sourceFile: JSON.stringify(sourceFile),
+  },
+  uploadDeckPath,
+);
 await verifyPptx(uploadDeckPath);
 
 console.log(`API verification passed:
@@ -80,6 +79,44 @@ async function requestDeck(url: string, body: Record<string, string> | FormData,
 
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(outPath, buffer);
+}
+
+async function uploadSourcePptx(buffer: Buffer, filename: string) {
+  const signed = await fetch(`${apiBase}/api/uploads/pptx`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8", Cookie: cookie },
+    body: JSON.stringify({
+      filename,
+      size: buffer.byteLength,
+      contentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }),
+  });
+
+  const payload = (await signed.json().catch(() => ({}))) as {
+    uploadUrl?: string;
+    storedFilename?: string;
+    originalName?: string;
+    error?: string;
+  };
+  if (!signed.ok || !payload.uploadUrl || !payload.storedFilename) {
+    throw new Error(`Signed upload failed: ${signed.status} ${payload.error || ""}`);
+  }
+
+  const uploaded = await fetch(payload.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    },
+    body: new Uint8Array(buffer),
+  });
+  if (!uploaded.ok) {
+    throw new Error(`Storage upload failed: ${uploaded.status} ${await uploaded.text()}`);
+  }
+
+  return {
+    storedFilename: payload.storedFilename,
+    originalName: payload.originalName || filename,
+  };
 }
 
 async function downloadQueuedGeneration(outPath: string, id: string) {
