@@ -41,6 +41,28 @@ const upload = multer({
   },
 });
 
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || process.env.APP_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowOrigin = origin && (allowedOrigins.includes(origin) || allowedOrigins.includes("*"));
+  if (allowOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => {

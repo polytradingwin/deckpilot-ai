@@ -110,7 +110,7 @@ export async function logout(req: Request, res: Response) {
       getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
     }
   }
-  res.clearCookie(cookieName, { path: "/" });
+  res.clearCookie(cookieName, getCookieOptions());
 }
 
 export async function consumeCredits(userId: string, amount: number) {
@@ -153,12 +153,19 @@ function normalizeEmail(email: string) {
 
 function setSessionCookie(res: Response, token: string, expiresAt: Date) {
   res.cookie(cookieName, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    ...getCookieOptions(),
     expires: expiresAt,
-    path: "/",
   });
+}
+
+function getCookieOptions() {
+  const sameSite = (process.env.COOKIE_SAME_SITE || (process.env.FRONTEND_ORIGIN ? "none" : "lax")).toLowerCase() as "lax" | "none" | "strict";
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: process.env.NODE_ENV === "production" || sameSite === "none",
+    path: "/",
+  };
 }
 
 function readCookie(req: Request, name: string) {

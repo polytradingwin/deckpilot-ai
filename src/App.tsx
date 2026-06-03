@@ -224,6 +224,19 @@ const faqs = [
   },
 ];
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+function apiPath(path: string) {
+  return `${apiBaseUrl}${path}`;
+}
+
+function apiFetch(path: string, init: RequestInit = {}) {
+  return fetch(apiPath(path), {
+    credentials: "include",
+    ...init,
+  });
+}
+
 function App() {
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<SourceType>("outline");
@@ -260,7 +273,7 @@ function App() {
 
   const refreshRuntimeConfig = async () => {
     try {
-      const response = await fetch("/api/health");
+      const response = await apiFetch("/api/health");
       if (!response.ok) return;
       const payload = (await response.json()) as { maxSlides?: number };
       const nextMax = Math.max(4, Math.min(30, Math.round(payload.maxSlides || 6)));
@@ -273,7 +286,7 @@ function App() {
 
   const refreshSession = async () => {
     try {
-      const response = await fetch("/api/session");
+      const response = await apiFetch("/api/session");
       if (!response.ok) return;
       const payload = (await response.json()) as { user?: UserAccount | null };
       setUser(payload.user || null);
@@ -295,7 +308,7 @@ function App() {
     setAuthError("");
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -321,7 +334,7 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     setUser(null);
     setRecentGenerations([]);
     setDownloadUrl("");
@@ -394,7 +407,7 @@ function App() {
       setGenerationError("正在上传 PPT 文件...");
       const sourceFile = await uploadSourcePptx(selectedFile);
       setGenerationError("正在后台生成，请稍候...");
-      return fetch("/api/generate-ppt", {
+      return apiFetch("/api/generate-ppt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -419,7 +432,7 @@ function App() {
     formData.append("audience", audience);
     formData.append("prompt", prompt);
 
-    return fetch("/api/generate-ppt", {
+    return apiFetch("/api/generate-ppt", {
       method: "POST",
       body: formData,
     });
@@ -430,7 +443,7 @@ function App() {
       throw new Error("PPT 文件不能超过 50MB。");
     }
 
-    const signed = await fetch("/api/uploads/pptx", {
+    const signed = await apiFetch("/api/uploads/pptx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -471,7 +484,7 @@ function App() {
   const waitForQueuedGeneration = async (id: string) => {
     for (let attempt = 0; attempt < 180; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 5000));
-      const response = await fetch(`/api/generations/${id}/status`);
+      const response = await apiFetch(`/api/generations/${id}/status`);
       if (!response.ok) continue;
       const payload = (await response.json()) as { status?: "pending" | "queued" | "running" | "ready" | "failed"; record?: GenerationRecord; error?: string };
       if (payload.status === "failed") {
@@ -483,7 +496,7 @@ function App() {
   };
 
   const downloadGenerationRecord = async (record: GenerationRecord) => {
-    const response = await fetch(`/api/generations/${record.id}/download`);
+    const response = await apiFetch(`/api/generations/${record.id}/download`);
     if (!response.ok) {
       throw new Error("PPT 已生成，但下载失败，请稍后在历史记录里下载。");
     }
@@ -499,7 +512,7 @@ function App() {
 
   const refreshGenerations = async () => {
     try {
-      const response = await fetch("/api/generations");
+      const response = await apiFetch("/api/generations");
       if (!response.ok) return;
       const payload = (await response.json()) as { records?: GenerationRecord[] };
       setRecentGenerations(payload.records?.slice(0, 5) || []);
@@ -797,7 +810,7 @@ function App() {
                   {generationId && <strong>已保存</strong>}
                 </div>
                 {recentGenerations.map((item) => (
-                  <a className="history-row" href={`/api/generations/${item.id}/download`} key={item.id}>
+                  <a className="history-row" href={apiPath(`/api/generations/${item.id}/download`)} key={item.id}>
                     <span>{item.title}</span>
                     <small>
                       {item.slideCount} 页 · {formatGenerationTime(item.createdAt)}
