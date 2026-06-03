@@ -11,6 +11,7 @@
     "doctor:openai": "tsx scripts/doctor-openai.ts",
     "verify:api": "tsx scripts/verify-api.ts",
     "quality:samples": "tsx scripts/quality-samples.ts",
+    "audit:prepayment": "tsx scripts/prepayment-audit.ts",
     "verify:worker": "tsx scripts/verify-long-worker.ts",
     "preview": "vite preview --host 127.0.0.1",
     "worker": "tsx server/worker.ts",
