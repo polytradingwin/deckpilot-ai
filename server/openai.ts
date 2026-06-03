@@ -146,7 +146,9 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
       if (!text) {
         throw new Error("Anthropic did not return a structured deck.");
       }
-      return normalizeDeck(parseDeckJson(text), input);
+      const deck = normalizeDeck(parseDeckJson(text), input);
+      validateSourceAnchors(deck, input);
+      return deck;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(message);
@@ -168,7 +170,9 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
         if (!text) {
           throw new Error("OpenAI did not return a structured deck.");
         }
-        return normalizeDeck(parseDeckJson(text), input);
+        const deck = normalizeDeck(parseDeckJson(text), input);
+        validateSourceAnchors(deck, input);
+        return deck;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`${model}: ${message}`);
@@ -370,6 +374,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
+    ...requiredAnchorPrompt(input),
     "User material:",
     input.prompt || "(No text provided.)",
     "",
@@ -387,6 +392,15 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- The deck must be directly renderable into PowerPoint.",
     "- JSON must be syntactically valid: double-quoted strings, escaped internal quotes, no raw line breaks inside strings, no trailing commas.",
   ].join("\n");
+}
+
+function requiredAnchorPrompt(input: PresentationRequest) {
+  const anchors = extractRequiredSourceAnchors(input);
+  if (!anchors.length) return [];
+  return [
+    `Required source anchors to preserve exactly: ${anchors.join(", ")}`,
+    "These anchors come from the uploaded PPT. Keep them in the generated slide titles, body, metrics, or speaker notes unless the user explicitly asks to remove them.",
+  ];
 }
 
 function structureRequirements(input: PresentationRequest) {
@@ -429,6 +443,56 @@ function getMaxOutputTokens(slides: number) {
   }
 
   return Math.min(32000, Math.max(8000, clampSlideCount(slides) * 950));
+}
+
+function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
+  if (input.source !== "ppt") return;
+  const anchors = extractRequiredSourceAnchors(input);
+  if (!anchors.length) return;
+
+  const deckText = [
+    deck.title,
+    deck.subtitle,
+    ...deck.slides.flatMap((slide) => [
+      slide.kicker,
+      slide.title,
+      slide.subtitle,
+      ...(slide.body || []),
+      slide.takeaway,
+      slide.speakerNotes,
+      slide.visual,
+      slide.metric?.label,
+      slide.metric?.value,
+      slide.metric?.context,
+      slide.chart?.title,
+      ...(slide.chart?.labels || []),
+    ]),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const missing = anchors.filter((anchor) => !deckText.includes(anchor));
+  if (missing.length) {
+    throw new Error(`Source anchor terms missing from generated deck: ${missing.join(", ")}`);
+  }
+}
+
+function extractRequiredSourceAnchors(input: PresentationRequest) {
+  if (input.source !== "ppt") return [];
+  const text = input.prompt || "";
+  const anchors = new Set<string>();
+
+  for (const match of text.matchAll(/\b(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)\b/g)) {
+    anchors.add(match[0]);
+  }
+  for (const match of text.matchAll(/\b\d+\s*(?:天|周|个月|月|年|days?|weeks?|months?|years?)\b/gi)) {
+    anchors.add(match[0].replace(/\s+/g, " "));
+  }
+  for (const match of text.matchAll(/\b\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年|days?|weeks?|months?|years?)\b/gi)) {
+    anchors.add(match[0].replace(/\s+/g, " "));
+  }
+
+  return Array.from(anchors).slice(0, 16);
 }
 
 function parseDeckJson(text: string) {
