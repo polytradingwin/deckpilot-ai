@@ -2,13 +2,21 @@
 
 Target address: `service@deckevo.com`
 
-The application is ready to send login verification codes from `service@deckevo.com`, but the mailbox itself must be configured outside the codebase.
+The application is ready to send login verification codes from `service@deckevo.com`, but the mailbox and sender must be configured outside the codebase.
 
 ## What is already implemented
 
 - Footer and legal pages show `service@deckevo.com`.
 - Login requires a 6-digit verification code.
-- SMTP sending is supported through these environment variables:
+- Resend sending is supported through these environment variables:
+
+```env
+RESEND_API_KEY=re_...
+EMAIL_FROM="DeckPilot AI <service@deckevo.com>"
+EMAIL_DEV_CODE=0
+```
+
+- SMTP sending is also supported through these environment variables:
 
 ```env
 SMTP_HOST=smtp.your-email-provider.com
@@ -29,7 +37,7 @@ Use one of these:
 - Cloudflare Email Routing: create `service@deckevo.com` and forward it to an existing inbox.
 - Zoho Mail / Google Workspace / Fastmail / Proton Mail: create a real mailbox for `service@deckevo.com`.
 
-Cloudflare Email Routing is useful for receiving and forwarding email, but it does not provide normal outgoing SMTP. If you use Cloudflare for receiving, you still need a sender such as Resend, Postmark, Zoho, Google Workspace, or another SMTP provider for verification codes.
+Cloudflare Email Routing is useful for receiving and forwarding email, but it does not provide outgoing verification email. Use Resend, Postmark, Zoho, Google Workspace, or another SMTP provider for sending.
 
 If you want to recreate the Cloudflare route by API instead of clicking through the dashboard, set `CLOUDFLARE_API_TOKEN` and run:
 
@@ -56,6 +64,8 @@ After SMTP is ready, update `/home/deckpilot/apps/deckpilot-ai/.env.local` on th
 
 ```env
 EMAIL_DEV_CODE=0
+RESEND_API_KEY=...
+EMAIL_FROM="DeckPilot AI <service@deckevo.com>"
 SMTP_HOST=...
 SMTP_PORT=587
 SMTP_SECURE=0

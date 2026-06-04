@@ -79,6 +79,7 @@ export async function requestLoginCode(email: string) {
     email: normalized,
     expiresInSeconds: loginCodeMinutes * 60,
     delivery: delivery.sent ? "email" : "development",
+    provider: delivery.provider,
     devCode: delivery.devCode,
   };
 }

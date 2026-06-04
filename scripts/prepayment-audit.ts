@@ -24,11 +24,11 @@ if (failed.length) {
 async function checkHealth() {
   try {
     const response = await fetch(`${siteUrl}/api/health`);
-    const payload = (await response.json()) as { ok?: boolean; model?: string; maxSlides?: number; dataStore?: string };
+    const payload = (await response.json()) as { ok?: boolean; model?: string; maxSlides?: number; dataStore?: string; emailDelivery?: string };
     checks.push({
       name: "API health",
       ok: response.ok && payload.ok === true && Boolean(payload.model) && payload.maxSlides === 30,
-      detail: `model=${payload.model || "missing"}, maxSlides=${payload.maxSlides || "missing"}, dataStore=${payload.dataStore || "missing"}`,
+      detail: `model=${payload.model || "missing"}, maxSlides=${payload.maxSlides || "missing"}, dataStore=${payload.dataStore || "missing"}, emailDelivery=${payload.emailDelivery || "missing"}`,
     });
   } catch (error) {
     checks.push({ name: "API health", ok: false, detail: error instanceof Error ? error.message : String(error) });
@@ -75,7 +75,7 @@ async function checkAuthCode() {
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({ email }),
     });
-    const codePayload = (await codeResponse.json().catch(() => ({}))) as { delivery?: string; devCode?: string; error?: string };
+    const codePayload = (await codeResponse.json().catch(() => ({}))) as { delivery?: string; provider?: string; devCode?: string; error?: string };
     const loginResponse =
       codePayload.devCode &&
       (await fetch(`${siteUrl}/api/auth/login`, {
@@ -86,8 +86,8 @@ async function checkAuthCode() {
 
     checks.push({
       name: "Verified email login",
-      ok: codeResponse.ok && Boolean(loginResponse && loginResponse.ok),
-      detail: `delivery=${codePayload.delivery || "missing"}${codePayload.error ? `, error=${codePayload.error}` : ""}`,
+      ok: codeResponse.ok && (codePayload.delivery === "email" || Boolean(loginResponse && loginResponse.ok)),
+      detail: `delivery=${codePayload.delivery || "missing"}, provider=${codePayload.provider || "missing"}${codePayload.error ? `, error=${codePayload.error}` : ""}`,
     });
   } catch (error) {
     checks.push({ name: "Verified email login", ok: false, detail: error instanceof Error ? error.message : String(error) });

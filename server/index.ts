@@ -10,6 +10,7 @@ import { extractTextFromPptx } from "./pptxReader";
 import { withUploadedPptxText } from "./queuedGeneration";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
+import { getEmailDeliveryMode } from "./email";
 import type { PresentationRequest } from "../src/shared/deck";
 
 const appRoot = process.cwd();
@@ -78,6 +79,7 @@ app.get("/api/health", (_req, res) => {
     dataStore: process.env.DATA_STORE === "supabase" ? "supabase" : "sqlite",
     generationMode: getGenerationMode(),
     maxSlides: getRuntimeMaxSlides(),
+    emailDelivery: getEmailDeliveryMode(),
   });
 });
 
