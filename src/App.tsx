@@ -332,6 +332,21 @@ function apiFetch(path: string, init: RequestInit = {}) {
   });
 }
 
+async function generationApiFetch(init: RequestInit) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await apiFetch("/api/generate-ppt", init);
+      if (![502, 503, 504].includes(response.status) || attempt === 1) {
+        return response;
+      }
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+  }
+  return apiFetch("/api/generate-ppt", init);
+}
+
 function App() {
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<SourceType>("outline");
@@ -557,6 +572,9 @@ function App() {
       if (!response.ok) {
         if (response.status === 401) openLogin();
         const payload = await response.json().catch(() => ({ error: "生成失败，请稍后重试。" }));
+        if ([502, 503, 504].includes(response.status)) {
+          throw new Error("服务正在重启或繁忙，已自动重试一次但仍失败，请重新点击生成。");
+        }
         throw new Error(payload.error || "生成失败，请稍后重试。");
       }
 
@@ -603,7 +621,7 @@ function App() {
         formData.append("prompt", generationPrompt);
         formData.append("file", selectedFile);
         setGenerationError("正在后台生成，请稍候...");
-        return apiFetch("/api/generate-ppt", {
+        return generationApiFetch({
           method: "POST",
           body: formData,
         });
@@ -612,7 +630,7 @@ function App() {
       setGenerationError("正在上传 PPT 文件...");
       const sourceFile = await uploadSourcePptx(selectedFile);
       setGenerationError("正在后台生成，请稍候...");
-      return apiFetch("/api/generate-ppt", {
+      return generationApiFetch({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -637,7 +655,7 @@ function App() {
     formData.append("audience", generationAudience);
     formData.append("prompt", generationPrompt);
 
-    return apiFetch("/api/generate-ppt", {
+    return generationApiFetch({
       method: "POST",
       body: formData,
     });
