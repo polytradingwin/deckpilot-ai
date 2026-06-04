@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import JSZip from "jszip";
 import {
   ArrowRight,
   BadgeCheck,
@@ -310,9 +311,6 @@ function App() {
   const [source, setSource] = useState<SourceType>("outline");
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("presenting");
   const [style, setStyle] = useState<Style>("consulting");
-  const [slides, setSlides] = useState(6);
-  const [maxSlides, setMaxSlides] = useState(6);
-  const [language, setLanguage] = useState("简体中文");
   const [audience, setAudience] = useState("高管 / 客户决策层");
   const [prompt, setPrompt] = useState(
     "为一家企业 AI 知识库产品制作销售方案，目标客户是大型制造企业，需要突出部署效率、数据安全和 ROI。",
@@ -323,6 +321,7 @@ function App() {
   const [downloadUrl, setDownloadUrl] = useState("");
   const [downloadName, setDownloadName] = useState("deckevo-presentation.pptx");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [sourceSlideCount, setSourceSlideCount] = useState<number | null>(null);
   const [generationId, setGenerationId] = useState("");
   const [recentGenerations, setRecentGenerations] = useState<GenerationRecord[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -330,32 +329,28 @@ function App() {
   const [verificationCode, setVerificationCode] = useState("");
   const [authStep, setAuthStep] = useState<"email" | "code">("email");
   const [devLoginCode, setDevLoginCode] = useState("");
+  const [resendCountdown, setResendCountdown] = useState(0);
   const [user, setUser] = useState<UserAccount | null>(null);
   const [authError, setAuthError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginIntent, setLoginIntent] = useState<"" | "generate">("");
   const [legalPage, setLegalPage] = useState<PolicyPage | null>(null);
+  const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const purpose = deliveryPurposeMap[deliveryMode];
   const slideTitles = useMemo(() => deliverySlideMap[deliveryMode] || slideMap[purpose], [deliveryMode, purpose]);
+  const inferredSlides = source === "ppt" ? sourceSlideCount || 12 : estimateOutlineSlides(prompt);
+  const outputLanguage = "按用户材料语言自动判断";
 
   useEffect(() => {
     void refreshSession();
-    void refreshRuntimeConfig();
   }, []);
 
-  const refreshRuntimeConfig = async () => {
-    try {
-      const response = await apiFetch("/api/health");
-      if (!response.ok) return;
-      const payload = (await response.json()) as { maxSlides?: number };
-      const nextMax = Math.max(4, Math.min(30, Math.round(payload.maxSlides || 6)));
-      setMaxSlides(nextMax);
-      setSlides((current) => Math.min(Math.max(current, 4), nextMax));
-    } catch {
-      setMaxSlides(6);
-    }
-  };
+  useEffect(() => {
+    if (authStep !== "code" || resendCountdown <= 0) return;
+    const timer = window.setTimeout(() => setResendCountdown((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [authStep, resendCountdown]);
 
   const refreshSession = async () => {
     try {
@@ -379,6 +374,7 @@ function App() {
     setAuthError("");
     setDevLoginCode("");
     setVerificationCode("");
+    setResendCountdown(0);
     setAuthStep("email");
     setLoginOpen(true);
   };
@@ -405,7 +401,10 @@ function App() {
         throw new Error(payload.error || "验证码发送失败。");
       }
       setDevLoginCode(payload.devCode || "");
+      setVerificationCode("");
+      setResendCountdown(60);
       setAuthStep("code");
+      window.setTimeout(() => codeInputRefs.current[0]?.focus(), 60);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "验证码发送失败。");
     } finally {
@@ -450,6 +449,44 @@ function App() {
     setRecentGenerations([]);
     setDownloadUrl("");
     setGenerationId("");
+  };
+
+  const handlePptxFileChange = async (file: File | null) => {
+    setSelectedFile(file);
+    setSourceSlideCount(null);
+    if (!file) return;
+
+    try {
+      setSourceSlideCount(await countPptxSlides(file));
+    } catch {
+      setSourceSlideCount(null);
+    }
+  };
+
+  const updateVerificationDigit = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, "").slice(-1);
+    const chars = verificationCode.padEnd(6, " ").split("");
+    chars[index] = digit || " ";
+    const nextCode = chars.join("").replace(/\s/g, "");
+    setVerificationCode(nextCode);
+    if (digit && index < 5) {
+      codeInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleVerificationKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && !verificationCode[index] && index > 0) {
+      codeInputRefs.current[index - 1]?.focus();
+    }
+    if (event.key === "Enter") void handleVerifyLogin();
+  };
+
+  const handleVerificationPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    event.preventDefault();
+    setVerificationCode(pasted);
+    codeInputRefs.current[Math.min(5, pasted.length)]?.focus();
   };
 
   const handleGenerate = async () => {
@@ -532,8 +569,8 @@ function App() {
           source,
           purpose,
           style,
-          slides,
-          language,
+          slides: inferredSlides,
+          language: outputLanguage,
           audience: generationAudience,
           prompt: generationPrompt,
           sourceFile,
@@ -545,8 +582,8 @@ function App() {
     formData.append("source", source);
     formData.append("purpose", purpose);
     formData.append("style", style);
-    formData.append("slides", String(slides));
-    formData.append("language", language);
+    formData.append("slides", String(inferredSlides));
+    formData.append("language", outputLanguage);
     formData.append("audience", generationAudience);
     formData.append("prompt", generationPrompt);
 
@@ -666,13 +703,6 @@ function App() {
           <button className="nav-link-button" type="button" onClick={() => setLegalPage("privacy")}>
             隐私
           </button>
-          <div className="language-switcher" aria-label="语言">
-            {["EN", "简", "繁", "ES", "日"].map((item) => (
-              <button className={item === "简" ? "active" : ""} key={item} type="button">
-                {item}
-              </button>
-            ))}
-          </div>
           {user ? (
             <div className="account-chip">
               <span>{user.email}</span>
@@ -695,11 +725,13 @@ function App() {
         <div className="hero-shade" />
         <div className="hero-content">
           <p className="eyebrow">PPT generation for serious work</p>
-          <h1>
-            你的内容，配得上更好的 PPT
+          <h1 className="hero-title">
+            <span>你的内容</span>
+            <span>配得上更好的 PPT</span>
           </h1>
           <p className="hero-copy">
-            上传即生成PPT，背后是一套经过千份演示训练的审美判断
+            <span>上传即生成PPT</span>
+            <span>背后是一套经过千份演示训练的审美判断</span>
           </p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={scrollToGenerator}>
@@ -762,17 +794,20 @@ function App() {
                 </div>
 
                 {source === "ppt" ? (
-                  <label className="upload-zone">
-                    <Upload size={22} />
-                    <span>{selectedFile ? selectedFile.name : "拖入 .pptx 文件或点击上传"}</span>
-                    <small>{selectedFile ? "已选择旧稿，生成时会先解析原始页面内容" : "支持 .pptx，后端会解析旧稿并重构成新演示"}</small>
-                    <input
-                      aria-label="上传 PPT 文件"
-                      type="file"
-                      accept=".pptx"
-                      onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                    />
-                  </label>
+                  <>
+                    <label className="upload-zone">
+                      <Upload size={22} />
+                      <span>{selectedFile ? selectedFile.name : "拖入 .pptx 文件或点击上传"}</span>
+                      <small>{selectedFile ? "已选择旧稿，生成时会先解析原始页面内容" : "支持 .pptx，后端会解析旧稿并重构成新演示"}</small>
+                      <input
+                        aria-label="上传 PPT 文件"
+                        type="file"
+                        accept=".pptx"
+                        onChange={(event) => void handlePptxFileChange(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    {selectedFile && <p className="format-note">无论原始文件尺寸如何，输出统一为标准 16:9 宽屏格式。</p>}
+                  </>
                 ) : (
                   <label className="prompt-field">
                     <span>粘贴文稿、脚本或大纲</span>
@@ -832,29 +867,6 @@ function App() {
                   ))}
                 </div>
 
-                <div className="settings-grid">
-                  <label className="range-field">
-                    <span>页数</span>
-                    <strong>{slides} 页</strong>
-                    <input
-                      type="range"
-                      min="4"
-                      max={maxSlides}
-                      value={slides}
-                      onChange={(event) => setSlides(Number(event.target.value))}
-                    />
-                  </label>
-                  <label className="input-field">
-                    <span>语言</span>
-                    <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-                      <option>简体中文</option>
-                      <option>English</option>
-                      <option>繁體中文</option>
-                      <option>日本語</option>
-                    </select>
-                  </label>
-                </div>
-
                 <div className="panel-actions split">
                   <button className="text-button" type="button" onClick={() => setStep(2)}>
                     上一步
@@ -896,7 +908,7 @@ function App() {
               <div className="deck-cover">
                 <span>{styleOptions.find((item) => item.id === style)?.title}</span>
                 <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
-                <p>{language} · {slides} pages</p>
+                <p>AI 自动决定页数与语言</p>
               </div>
               <div className="chart-row">
                 <span />
@@ -1081,8 +1093,21 @@ function App() {
               <X size={18} />
             </button>
             <Mail size={24} />
-            <h2 id="login-title">{authStep === "email" ? "登录 DeckEvo" : "输入验证码"}</h2>
-            <p>{authStep === "email" ? "输入邮箱后，我们会发送 6 位验证码，用于保存生成记录和试用额度。" : "验证码 10 分钟内有效。没有收到时可以返回重新发送。"}</p>
+            {authStep === "code" && (
+              <button className="back-button" type="button" onClick={() => setAuthStep("email")}>
+                ← 换个邮箱
+              </button>
+            )}
+            <h2 id="login-title">{authStep === "email" ? "登录 DeckEvo" : "查收验证码"}</h2>
+            <p>
+              {authStep === "email"
+                ? "输入邮箱后，我们会发送 6 位验证码，用于保存生成记录和试用额度。"
+                : (
+                  <>
+                    我们刚刚发送到 <strong className="email-highlight">{email}</strong>
+                  </>
+                )}
+            </p>
             <label>
               <span>邮箱</span>
               <input
@@ -1097,19 +1122,32 @@ function App() {
               />
             </label>
             {authStep === "code" && (
-              <label>
-                <span>验证码</span>
-                <input
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder=""
-                  value={verificationCode}
-                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void handleVerifyLogin();
-                  }}
-                />
-              </label>
+              <>
+                <div className="code-inputs" aria-label="验证码">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <input
+                      // eslint-disable-next-line react/no-array-index-key
+                      key={index}
+                      ref={(element) => {
+                        codeInputRefs.current[index] = element;
+                      }}
+                      aria-label={`验证码第 ${index + 1} 位`}
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={verificationCode[index] || ""}
+                      onChange={(event) => updateVerificationDigit(index, event.target.value)}
+                      onKeyDown={(event) => handleVerificationKeyDown(index, event)}
+                      onPaste={handleVerificationPaste}
+                    />
+                  ))}
+                </div>
+                <p className="resend-line">
+                  没收到？检查垃圾邮件，或
+                  <button type="button" onClick={handleRequestCode} disabled={isLoggingIn || resendCountdown > 0}>
+                    {resendCountdown > 0 ? `重新发送 (${resendCountdown}s)` : "重新发送"}
+                  </button>
+                </p>
+              </>
             )}
             {devLoginCode && <p className="dev-code">测试验证码：{devLoginCode}</p>}
             {authError && <p className="error-message">{authError}</p>}
@@ -1122,9 +1160,7 @@ function App() {
               {isLoggingIn ? "处理中" : authStep === "email" ? "发送验证码" : "验证并登录"}
             </button>
             {authStep === "code" && (
-              <button className="text-button wide" type="button" onClick={() => setAuthStep("email")}>
-                换一个邮箱
-              </button>
+              <p className="auth-footnote">验证码 15 分钟内有效，登录后浏览器记住你 90 天。</p>
             )}
           </div>
         </div>
@@ -1179,6 +1215,22 @@ function formatGenerationTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+async function countPptxSlides(file: File) {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const count = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).length;
+  return Math.max(4, Math.min(30, count || 12));
+}
+
+function estimateOutlineSlides(text: string) {
+  const compactLength = text.replace(/\s+/g, "").length;
+  if (compactLength <= 120) return 6;
+  if (compactLength <= 500) return 8;
+  if (compactLength <= 1200) return 10;
+  if (compactLength <= 2200) return 14;
+  if (compactLength <= 3600) return 18;
+  return 24;
 }
 
 export default App;

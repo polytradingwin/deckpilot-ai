@@ -19,8 +19,8 @@ type UserRow = {
 };
 
 const cookieName = "deckpilot_session";
-const sessionDays = 30;
-const loginCodeMinutes = 10;
+const sessionDays = 90;
+const loginCodeMinutes = 15;
 const maxCodeAttempts = 5;
 const loginCodes = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 
@@ -115,7 +115,7 @@ async function loginWithEmail(email: string, res: Response) {
   const normalized = normalizeEmail(email);
 
   if (useSupabaseStore()) {
-    const result = await supabaseLogin(normalized, getDefaultCredits());
+    const result = await supabaseLogin(normalized, getDefaultCredits(), sessionDays);
     setSessionCookie(res, result.token, new Date(result.expiresAt));
     return result.user;
   }

@@ -72,11 +72,13 @@ img {
 
 main {
   overflow-x: clip;
+  padding-top: 72px;
 }
 
 .site-header {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -258,12 +260,12 @@ main {
   overflow-wrap: anywhere;
 }
 
-.hero h1 span {
+.hero-title span {
   display: block;
-  margin-top: 8px;
-  background: linear-gradient(90deg, #f5f2ec 0%, #d7b981 45%, #a7c8ca 100%);
+  background: linear-gradient(105deg, #fffaf0 0%, #e5d1a8 42%, #a7c8ca 76%, #f5f2ec 100%);
   background-clip: text;
   color: transparent;
+  text-shadow: 0 18px 56px rgba(215, 185, 129, 0.14);
   overflow-wrap: anywhere;
 }
 
@@ -274,6 +276,10 @@ main {
   font-size: 1rem;
   line-height: 1.8;
   overflow-wrap: anywhere;
+}
+
+.hero-copy span {
+  display: block;
 }
 
 .hero-actions {
@@ -514,6 +520,13 @@ main {
 .pricing-card small,
 .preview-topline span {
   color: var(--muted);
+}
+
+.format-note {
+  margin: -10px 0 0;
+  color: var(--subtle);
+  text-align: center;
+  line-height: 1.7;
 }
 
 .upload-zone input {
@@ -1115,7 +1128,7 @@ main {
   position: relative;
   display: grid;
   gap: 16px;
-  width: min(100%, 420px);
+  width: min(100%, 520px);
   padding: 30px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1168,6 +1181,66 @@ main {
 
 .login-modal label span {
   color: var(--muted);
+}
+
+.back-button {
+  width: fit-content;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 650;
+}
+
+.email-highlight {
+  color: var(--gold);
+  font-weight: 650;
+}
+
+.code-inputs {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.code-inputs input {
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: #15161d;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.code-inputs input:focus {
+  border-color: var(--gold);
+  outline: 2px solid rgba(215, 185, 129, 0.14);
+}
+
+.resend-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.resend-line button {
+  border: 0;
+  padding: 0;
+  color: var(--gold);
+  background: transparent;
+}
+
+.resend-line button:disabled {
+  color: var(--subtle);
+}
+
+.auth-footnote {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .dev-code {
@@ -1231,8 +1304,11 @@ main {
 }
 
 @media (max-width: 760px) {
+  main {
+    padding-top: 64px;
+  }
+
   .site-header {
-    position: sticky;
     height: 64px;
     width: 100vw;
     max-width: 100%;
@@ -1274,7 +1350,7 @@ main {
     word-break: break-all;
   }
 
-  .hero h1 span {
+  .hero-title span {
     width: min(100%, 540px);
     margin-right: auto;
     margin-left: auto;
@@ -1348,7 +1424,7 @@ main {
     font-size: 1.62rem;
   }
 
-  .hero h1 span {
+  .hero-title span {
     width: min(100%, 300px);
   }
 
@@ -1376,5 +1452,14 @@ main {
 
   .price {
     font-size: 2rem;
+  }
+
+  .code-inputs {
+    gap: 7px;
+  }
+
+  .code-inputs input {
+    height: 48px;
+    font-size: 1rem;
   }
 }

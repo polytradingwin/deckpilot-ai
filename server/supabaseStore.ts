@@ -15,8 +15,8 @@ export function useSupabaseStore() {
   return process.env.DATA_STORE === "supabase";
 }
 
-export async function supabaseLogin(email: string, defaultCredits: number) {
-  return callSupabaseBackend<SupabaseLoginResult>("login", { email, defaultCredits });
+export async function supabaseLogin(email: string, defaultCredits: number, sessionDays: number) {
+  return callSupabaseBackend<SupabaseLoginResult>("login", { email, defaultCredits, sessionDays });
 }
 
 export async function supabaseFindUserBySession(token: string) {
