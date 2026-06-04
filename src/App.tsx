@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Check,
+  ChevronDown,
   Download,
   Eye,
   FileText,
@@ -16,6 +17,7 @@ import {
   Shield,
   Sparkles,
   Upload,
+  UserCircle,
   WandSparkles,
   X,
   type LucideIcon,
@@ -197,6 +199,27 @@ const qualityItems = [
   },
 ];
 
+const beforeAfterCases = [
+  {
+    title: "经营月报",
+    before: "原稿：指标堆叠、结论不突出，领导需要自己从数据里找重点。",
+    after: "生成后：先给经营判断，再用趋势、差异和下一步动作展开。",
+    result: "从数据罗列变成可汇报的经营结论。",
+  },
+  {
+    title: "融资路演",
+    before: "原稿：产品、市场、财务混在一起，故事线不够清楚。",
+    after: "生成后：按机会、壁垒、增长、商业模型和融资计划重排。",
+    result: "从材料拼接变成投资人能跟上的叙事。",
+  },
+  {
+    title: "销售方案",
+    before: "原稿：功能介绍太多，客户痛点和 ROI 没有被放大。",
+    after: "生成后：先框定客户问题，再展示方案架构、价值测算和合作路径。",
+    result: "从产品说明变成客户决策材料。",
+  },
+];
+
 const faqs = [
   {
     q: "现在能直接生成真实 PPT 文件吗？",
@@ -335,12 +358,15 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginIntent, setLoginIntent] = useState<"" | "generate">("");
   const [legalPage, setLegalPage] = useState<PolicyPage | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const purpose = deliveryPurposeMap[deliveryMode];
   const slideTitles = useMemo(() => deliverySlideMap[deliveryMode] || slideMap[purpose], [deliveryMode, purpose]);
   const inferredSlides = source === "ppt" ? sourceSlideCount || 12 : estimateOutlineSlides(prompt);
   const outputLanguage = "按用户材料语言自动判断";
+  const accountName = user?.email.split("@")[0] || "";
 
   useEffect(() => {
     void refreshSession();
@@ -360,7 +386,7 @@ function App() {
       setUser(payload.user || null);
       if (payload.user) {
         setEmail(payload.user.email);
-        await refreshGenerations();
+        void refreshGenerations();
       } else {
         setRecentGenerations([]);
       }
@@ -429,7 +455,7 @@ function App() {
       }
       setUser(payload.user);
       closeLogin();
-      await refreshGenerations();
+      void refreshGenerations();
       if (loginIntent === "generate") {
         setLoginIntent("");
         window.setTimeout(() => {
@@ -449,6 +475,8 @@ function App() {
     setRecentGenerations([]);
     setDownloadUrl("");
     setGenerationId("");
+    setAccountMenuOpen(false);
+    setAccountOpen(false);
   };
 
   const handlePptxFileChange = async (file: File | null) => {
@@ -516,7 +544,7 @@ function App() {
         }
         const record = await waitForQueuedGeneration(payload.id);
         await downloadGenerationRecord(record);
-        setGenerationError("");
+        setGenerationError("已完成");
         setGenerated(true);
         await refreshGenerations();
         await refreshSession();
@@ -540,6 +568,7 @@ function App() {
       setDownloadName(nextName);
       setGenerationId(nextGenerationId);
       setGenerated(true);
+      setGenerationError("已完成");
       await refreshGenerations();
       await refreshSession();
       downloadDeck(nextUrl, nextName);
@@ -704,12 +733,28 @@ function App() {
             隐私
           </button>
           {user ? (
-            <div className="account-chip">
-              <span>{user.email}</span>
-              <strong>{user.creditsRemaining} credits</strong>
-              <button type="button" onClick={handleLogout}>
-                退出
+            <div className="account-menu-wrap">
+              <button className="account-chip" type="button" onClick={() => setAccountMenuOpen((open) => !open)}>
+                <span>{accountName}</span>
+                <strong>{user.creditsRemaining} cr</strong>
+                <ChevronDown size={14} />
               </button>
+              {accountMenuOpen && (
+                <div className="account-menu">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountOpen(true);
+                      setAccountMenuOpen(false);
+                    }}
+                  >
+                    我的账户
+                  </button>
+                  <button type="button" onClick={handleLogout}>
+                    退出登录
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button className="ghost-button" type="button" onClick={openLogin}>
@@ -868,8 +913,8 @@ function App() {
                 </div>
 
                 <div className="panel-actions split">
-                  <button className="text-button" type="button" onClick={() => setStep(2)}>
-                    上一步
+                  <button className="outline-button back-action" type="button" onClick={() => setStep(2)}>
+                    返回
                   </button>
                   <button className="primary-button" type="button" onClick={handleGenerate} data-generate-button="true">
                     {isGenerating ? "生成中" : generated ? "重新生成 PPT" : "生成 PPT"}
@@ -877,7 +922,7 @@ function App() {
                   </button>
                 </div>
 
-                {generationError && <p className="error-message">{generationError}</p>}
+                {generationError && <p className={`status-message ${generated ? "complete" : "pending"}`}>{generationError}</p>}
               </div>
             )}
           </div>
@@ -964,6 +1009,28 @@ function App() {
               <span>{String(index + 1).padStart(2, "0")}</span>
               <h3>{item.title}</h3>
               <p>{item.body}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="case-gallery" aria-label="使用前后案例">
+          {beforeAfterCases.map((item) => (
+            <article className="case-card" key={item.title}>
+              <div className="case-card-head">
+                <span>Before / After</span>
+                <h3>{item.title}</h3>
+              </div>
+              <div className="case-compare">
+                <div>
+                  <small>使用前</small>
+                  <p>{item.before}</p>
+                </div>
+                <div>
+                  <small>使用后</small>
+                  <p>{item.after}</p>
+                </div>
+              </div>
+              <strong>{item.result}</strong>
             </article>
           ))}
         </div>
@@ -1082,6 +1149,50 @@ function App() {
                 </section>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {accountOpen && user && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="account-title">
+          <div className="account-modal">
+            <button className="icon-button" type="button" onClick={() => setAccountOpen(false)} aria-label="关闭">
+              <X size={18} />
+            </button>
+            <div className="account-modal-title">
+              <UserCircle size={24} />
+              <h2 id="account-title">我的账户</h2>
+            </div>
+            <div className="account-detail-list">
+              <div>
+                <span>邮箱</span>
+                <strong>{user.email}</strong>
+              </div>
+              <div>
+                <span>Credit 余额</span>
+                <strong>{user.creditsRemaining} credits</strong>
+              </div>
+              <div>
+                <span>订阅</span>
+                <strong>按次付费</strong>
+              </div>
+            </div>
+            <div className="upgrade-card">
+              <p>升级包月后，你将获得更高额度和后续专属模板能力。</p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  setAccountOpen(false);
+                  document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                查看价格
+              </button>
+            </div>
+            <button className="account-logout" type="button" onClick={handleLogout}>
+              退出登录
+            </button>
           </div>
         </div>
       )}

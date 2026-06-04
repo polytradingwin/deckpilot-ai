@@ -172,20 +172,28 @@ main {
   background: rgba(215, 185, 129, 0.06);
 }
 
+.account-menu-wrap {
+  position: relative;
+}
+
 .account-chip {
   min-height: 40px;
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: min(42vw, 360px);
-  padding: 4px 6px 4px 12px;
+  max-width: min(42vw, 240px);
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
 }
 
 .account-chip span {
   overflow: hidden;
+  max-width: 120px;
+  color: var(--gold);
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -195,12 +203,38 @@ main {
   white-space: nowrap;
 }
 
-.account-chip button {
-  min-height: 30px;
-  padding: 0 10px;
+.account-chip svg {
+  color: var(--muted);
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 170px;
+  padding: 12px;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #171820;
+  box-shadow: var(--shadow);
+}
+
+.account-menu button {
+  min-height: 42px;
+  border: 0;
+  padding: 0 12px;
   color: var(--muted);
   background: transparent;
+  text-align: left;
+  font-weight: 650;
+}
+
+.account-menu button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .hero {
@@ -586,6 +620,35 @@ main {
   line-height: 1.6;
 }
 
+.status-message {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  line-height: 1.6;
+  font-weight: 800;
+}
+
+.status-message.pending {
+  border: 1px solid rgba(226, 123, 106, 0.35);
+  color: #ffb0a4;
+  background: rgba(226, 123, 106, 0.08);
+}
+
+.status-message.complete {
+  border: 1px solid rgba(135, 181, 151, 0.46);
+  color: #bfe8c9;
+  background: rgba(135, 181, 151, 0.12);
+}
+
+.back-action {
+  width: auto;
+  min-width: 126px;
+  margin-top: 0;
+  border-color: rgba(215, 185, 129, 0.34);
+  color: var(--gold);
+  background: rgba(215, 185, 129, 0.08);
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -848,6 +911,68 @@ main {
 .faq-list p {
   color: var(--muted);
   line-height: 1.75;
+}
+
+.case-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 34px;
+}
+
+.case-card {
+  display: grid;
+  gap: 18px;
+  min-height: 340px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(215, 185, 129, 0.12), transparent 42%),
+    #12151b;
+}
+
+.case-card-head span,
+.case-compare small {
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.case-card h3 {
+  margin: 8px 0 0;
+  font-size: 1.28rem;
+}
+
+.case-compare {
+  display: grid;
+  gap: 12px;
+}
+
+.case-compare div {
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.case-compare div:last-child {
+  border-color: rgba(167, 200, 202, 0.28);
+  background: rgba(167, 200, 202, 0.06);
+}
+
+.case-compare p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.case-card > strong {
+  align-self: end;
+  color: #e7edf0;
+  line-height: 1.5;
 }
 
 .gallery-strip {
@@ -1124,7 +1249,8 @@ main {
 }
 
 .login-modal,
-.legal-modal {
+.legal-modal,
+.account-modal {
   position: relative;
   display: grid;
   gap: 16px;
@@ -1140,6 +1266,83 @@ main {
   width: min(100%, 760px);
   max-height: min(760px, calc(100svh - 40px));
   overflow: auto;
+}
+
+.account-modal {
+  width: min(100%, 560px);
+}
+
+.account-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.account-modal-title svg {
+  color: var(--gold);
+}
+
+.account-modal-title h2 {
+  margin: 0;
+}
+
+.account-detail-list {
+  display: grid;
+  margin-top: 18px;
+}
+
+.account-detail-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 58px;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-detail-list span {
+  color: var(--muted);
+}
+
+.account-detail-list strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.upgrade-card {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  margin-top: 10px;
+  padding: 24px;
+  border: 1px solid rgba(215, 185, 129, 0.34);
+  border-radius: 8px;
+  background: rgba(215, 185, 129, 0.07);
+  text-align: center;
+}
+
+.upgrade-card p {
+  margin: 0;
+  color: #ddd6c8;
+  line-height: 1.7;
+}
+
+.upgrade-card .primary-button {
+  width: auto;
+  min-width: 140px;
+}
+
+.account-logout {
+  min-height: 48px;
+  margin-top: 14px;
+  border: 0;
+  color: var(--gold);
+  background: transparent;
+  font-weight: 800;
 }
 
 .login-modal h2,
@@ -1298,6 +1501,7 @@ main {
 
   .pricing-grid,
   .quality-grid,
+  .case-gallery,
   .gallery-strip {
     grid-template-columns: 1fr;
   }
@@ -1333,6 +1537,14 @@ main {
   .nav-link-button,
   .language-switcher {
     display: none;
+  }
+
+  .account-chip {
+    max-width: 190px;
+  }
+
+  .account-chip span {
+    max-width: 82px;
   }
 
   .hero {
@@ -1446,8 +1658,28 @@ main {
   .generator-workspace,
   .preview-pane,
   .pricing-card,
-  .quality-item {
+  .quality-item,
+  .case-card {
     padding: 20px;
+  }
+
+  .account-chip {
+    max-width: 150px;
+    padding: 0 10px;
+  }
+
+  .account-chip span {
+    max-width: 64px;
+  }
+
+  .account-chip strong {
+    font-size: 0.86rem;
+  }
+
+  .account-modal,
+  .login-modal,
+  .legal-modal {
+    padding: 22px;
   }
 
   .price {
