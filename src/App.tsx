@@ -623,8 +623,8 @@ function App() {
   };
 
   const uploadSourcePptx = async (file: File) => {
-    if (file.size > 50 * 1024 * 1024) {
-      throw new Error("PPT 文件不能超过 50MB。");
+    if (file.size > 100 * 1024 * 1024) {
+      throw new Error("PPT 文件不能超过 100MB。");
     }
 
     const signed = await apiFetch("/api/uploads/pptx", {

@@ -30,7 +30,7 @@ const isNetlifyRuntime = process.env.DEPLOY_TARGET === "netlify" || Boolean(proc
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 20 * 1024 * 1024,
+    fileSize: 100 * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     if (
@@ -204,8 +204,8 @@ app.post("/api/uploads/pptx", async (req, res) => {
       res.status(400).json({ error: "只支持上传 .pptx 文件。" });
       return;
     }
-    if (!Number.isFinite(size) || size <= 0 || size > 50 * 1024 * 1024) {
-      res.status(400).json({ error: "PPT 文件大小需要在 50MB 以内。" });
+    if (!Number.isFinite(size) || size <= 0 || size > 100 * 1024 * 1024) {
+      res.status(400).json({ error: "PPT 文件大小需要在 100MB 以内。" });
       return;
     }
 
