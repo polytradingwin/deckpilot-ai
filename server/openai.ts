@@ -478,10 +478,10 @@ function getMaxOutputTokens(slides: number) {
   }
 
   if (process.env.DECKPILOT_LONG_WORKER !== "1") {
-    return Math.min(6000, Math.max(3500, clampSlideCount(slides) * 550));
+    return Math.min(16000, Math.max(8000, clampSlideCount(slides) * 1100));
   }
 
-  return Math.min(32000, Math.max(8000, clampSlideCount(slides) * 950));
+  return Math.min(32000, Math.max(12000, clampSlideCount(slides) * 1400));
 }
 
 function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
@@ -535,8 +535,13 @@ function extractRequiredSourceAnchors(input: PresentationRequest) {
 }
 
 function parseDeckJson(text: string) {
-  const candidates = [extractJsonObject(stripJsonFence(text))];
-  candidates.push(escapeControlCharactersInStrings(candidates[0]));
+  const base = extractJsonObject(stripJsonFence(text));
+  const candidates = uniqueCandidates([
+    base,
+    escapeControlCharactersInStrings(base),
+    repairTruncatedJson(base),
+    repairTruncatedJson(escapeControlCharactersInStrings(base)),
+  ]);
 
   let lastError: unknown;
   for (const candidate of candidates) {
@@ -557,7 +562,57 @@ function extractJsonObject(text: string) {
   if (first >= 0 && last > first) {
     return trimmed.slice(first, last + 1);
   }
+  if (first >= 0) {
+    return trimmed.slice(first);
+  }
   return trimmed;
+}
+
+function uniqueCandidates(candidates: string[]) {
+  return Array.from(new Set(candidates.filter((candidate) => candidate.trim().length > 0)));
+}
+
+function repairTruncatedJson(text: string) {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+
+  for (const char of text.trim()) {
+    output += char;
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") stack.push("}");
+    if (char === "[") stack.push("]");
+    if ((char === "}" || char === "]") && stack[stack.length - 1] === char) stack.pop();
+  }
+
+  if (inString) output += '"';
+  output = output.trimEnd().replace(/,\s*$/, "");
+
+  while (stack.length) {
+    const closer = stack.pop() || "";
+    output = output.replace(/,\s*$/, "");
+    output += closer;
+  }
+
+  return output.replace(/,\s*([}\]])/g, "$1");
 }
 
 function escapeControlCharactersInStrings(text: string) {
