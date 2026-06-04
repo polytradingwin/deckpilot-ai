@@ -59,6 +59,9 @@ type UserAccount = {
   creditsRemaining: number;
 };
 
+const signedUploadLimitBytes = 50 * 1024 * 1024;
+const maxPptUploadBytes = 100 * 1024 * 1024;
+
 const sourceOptions: Option<SourceType>[] = [
   {
     id: "ppt",
@@ -588,6 +591,24 @@ function App() {
     const generationPrompt = [deliveryPrompt, prompt].filter(Boolean).join("\n\n");
 
     if (source === "ppt" && selectedFile) {
+      if (selectedFile.size > signedUploadLimitBytes) {
+        setGenerationError("正在上传 PPT 文件...");
+        const formData = new FormData();
+        formData.append("source", source);
+        formData.append("purpose", purpose);
+        formData.append("style", style);
+        formData.append("slides", String(inferredSlides));
+        formData.append("language", outputLanguage);
+        formData.append("audience", generationAudience);
+        formData.append("prompt", generationPrompt);
+        formData.append("file", selectedFile);
+        setGenerationError("正在后台生成，请稍候...");
+        return apiFetch("/api/generate-ppt", {
+          method: "POST",
+          body: formData,
+        });
+      }
+
       setGenerationError("正在上传 PPT 文件...");
       const sourceFile = await uploadSourcePptx(selectedFile);
       setGenerationError("正在后台生成，请稍候...");
@@ -623,7 +644,7 @@ function App() {
   };
 
   const uploadSourcePptx = async (file: File) => {
-    if (file.size > 100 * 1024 * 1024) {
+    if (file.size > maxPptUploadBytes) {
       throw new Error("PPT 文件不能超过 100MB。");
     }
 

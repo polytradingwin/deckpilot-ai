@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getCreditCost, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
 import { createCanvaAuthorizationUrl, getCanvaRuntimeStatus, handleCanvaOAuthCallback } from "./canva";
-import { createSignedPptxUpload, savePptxFile } from "./fileStorage";
+import { createSignedPptxUpload } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
 import { withUploadedPptxText } from "./queuedGeneration";
@@ -242,19 +242,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
 
     if (isQueuedGenerationRuntime()) {
       const jobId = randomUUID();
-      const uploadedFile = req.file;
-      const sourceFile =
-        signedSourceFile ||
-        (uploadedFile
-          ? {
-            storedFilename: `source-${randomUUID()}.pptx`,
-            originalName: uploadedFile.originalname,
-          }
-          : null);
-
-      if (sourceFile && uploadedFile) {
-        await savePptxFile(sourceFile.storedFilename, uploadedFile.buffer);
-      }
+      const sourceFile = signedSourceFile;
 
       await createGenerationJob(user.id, jobId);
       await enqueueBackgroundGeneration(req, user.id, input, sourceFile, jobId);
