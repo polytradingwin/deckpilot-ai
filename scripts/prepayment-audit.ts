@@ -68,7 +68,7 @@ async function checkFrontendBundle() {
 }
 
 async function checkAuthCode() {
-  const email = `audit-${Date.now()}@deckpilot.local`;
+  const email = process.env.AUDIT_EMAIL || "service@deckevo.com";
   try {
     const codeResponse = await fetch(`${siteUrl}/api/auth/code`, {
       method: "POST",
