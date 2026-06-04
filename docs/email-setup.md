@@ -31,6 +31,12 @@ Use one of these:
 
 Cloudflare Email Routing is useful for receiving and forwarding email, but it does not provide normal outgoing SMTP. If you use Cloudflare for receiving, you still need a sender such as Resend, Postmark, Zoho, Google Workspace, or another SMTP provider for verification codes.
 
+If you want to recreate the Cloudflare route by API instead of clicking through the dashboard, set `CLOUDFLARE_API_TOKEN` and run:
+
+```sh
+npm run setup:email-routing
+```
+
 ## DNS checklist
 
 Add the provider's DNS records in Cloudflare DNS:

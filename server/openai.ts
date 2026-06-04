@@ -40,7 +40,23 @@ const deckSchema = {
         properties: {
           layout: {
             type: "string",
-            enum: ["cover", "agenda", "section", "executiveSummary", "content", "chart", "comparison", "timeline", "matrix", "closing"],
+            enum: [
+              "cover",
+              "agenda",
+              "section",
+              "executiveSummary",
+              "content",
+              "chart",
+              "comparison",
+              "timeline",
+              "matrix",
+              "heroMetric",
+              "process",
+              "caseStudy",
+              "quote",
+              "dashboard",
+              "closing",
+            ],
           },
           kicker: { type: "string" },
           title: { type: "string" },
@@ -391,6 +407,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...sourceSpecificRequirements(input),
     ...structureRequirements(input),
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
+    "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages.",
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
     "- Add a short takeaway to most non-cover slides.",
@@ -418,6 +435,7 @@ function structureRequirements(input: PresentationRequest) {
     return [
       "- Preserve the uploaded deck's page order unless the user explicitly asks for a new order.",
       "- Use layouts that fit each original slide's purpose; do not force a cover/agenda/executive-summary pattern if the source deck does not support it.",
+      "- Use richer layout plugins where appropriate: dashboard for KPI-heavy source slides, process for workflow slides, caseStudy for example/outcome slides, heroMetric for a dominant number or claim.",
       "- For each output slide, transform the corresponding source content into clearer executive language and better visual hierarchy.",
     ];
   }
@@ -425,7 +443,7 @@ function structureRequirements(input: PresentationRequest) {
   return [
     "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
-    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, comparison for tradeoffs, timeline for rollout, matrix for priorities or risk mapping.",
+    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix for priorities or risk mapping, quote for decisive recommendations.",
   ];
 }
 
@@ -632,9 +650,13 @@ function fallbackLayout(index: number, total: number): DeckSpec["slides"][number
   if (index === 1) return "agenda";
   if (index === total - 1) return "closing";
   if (index === 2) return "executiveSummary";
+  if (index % 9 === 0) return "caseStudy";
+  if (index % 8 === 0) return "quote";
   if (index % 7 === 0) return "timeline";
+  if (index % 6 === 0) return "dashboard";
   if (index % 5 === 0) return "matrix";
   if (index % 4 === 0) return "chart";
+  if (index % 3 === 0) return "process";
   return "content";
 }
 

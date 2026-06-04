@@ -278,6 +278,31 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
+  if (slide.layout === "heroMetric") {
+    renderHeroMetric(page, slide, accent, template);
+    return;
+  }
+
+  if (slide.layout === "process") {
+    renderProcess(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "caseStudy") {
+    renderCaseStudy(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "quote") {
+    renderQuote(page, slide, accent, template);
+    return;
+  }
+
+  if (slide.layout === "dashboard") {
+    renderDashboard(page, slide, accent);
+    return;
+  }
+
   if (slide.layout === "closing") {
     renderClosing(page, slide, accent);
     return;
@@ -919,6 +944,393 @@ function renderMatrix(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   });
 
   addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  page.addText(slide.kicker || "Key signal", {
+    x: 0.78,
+    y: 1.05,
+    w: 2.6,
+    h: 0.22,
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  page.addText(slide.title, {
+    x: 0.76,
+    y: 1.48,
+    w: 6.25,
+    h: 1.15,
+    fit: "shrink",
+    fontFace: "Aptos Display",
+    fontSize: template === "academicPaper" ? 25 : 31,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+  });
+  if (slide.subtitle) {
+    page.addText(slide.subtitle, {
+      x: 0.78,
+      y: 2.86,
+      w: 5.65,
+      h: 0.38,
+      fit: "shrink",
+      fontSize: 11,
+      color: colors.muted,
+      margin: 0,
+    });
+  }
+
+  page.addShape("rect", {
+    x: 7.4,
+    y: 1.48,
+    w: 4.45,
+    h: 3.7,
+    fill: { color: colors.panel2, transparency: 4 },
+    line: { color: colors[accent], transparency: 16, width: 1.2 },
+  });
+  page.addText(slide.metric?.label || "Primary signal", {
+    x: 7.82,
+    y: 1.92,
+    w: 2.6,
+    h: 0.26,
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  page.addText(slide.metric?.value || "01", {
+    x: 7.78,
+    y: 2.48,
+    w: 3.45,
+    h: 0.9,
+    fit: "shrink",
+    fontFace: "Aptos Display",
+    fontSize: 39,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+  });
+  page.addText(slide.metric?.context || slide.visual || "decision-grade evidence", {
+    x: 7.84,
+    y: 3.58,
+    w: 3.15,
+    h: 0.56,
+    fit: "shrink",
+    fontSize: 11,
+    color: colors.muted,
+    margin: 0,
+  });
+
+  addBulletPanel(page, slide.body || [], 0.8, 3.78, 5.15, accent);
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderProcess(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  if (slide.subtitle) {
+    page.addText(slide.subtitle, {
+      x: 0.76,
+      y: 1.88,
+      w: 7.8,
+      h: 0.32,
+      fit: "shrink",
+      fontSize: 11,
+      color: colors.muted,
+      margin: 0,
+    });
+  }
+
+  const steps = (slide.body || ["Input", "Transform", "Review", "Deliver"]).slice(0, 5);
+  const startX = 0.78;
+  const cardW = steps.length > 4 ? 2.14 : 2.58;
+  const gap = steps.length > 4 ? 0.18 : 0.32;
+  const y = 3.05;
+
+  steps.forEach((step, i) => {
+    const x = startX + i * (cardW + gap);
+    if (i > 0) {
+      page.addShape("line", {
+        x: x - gap + 0.02,
+        y: y + 0.72,
+        w: gap - 0.04,
+        h: 0,
+        line: { color: colors[accent], transparency: 18, width: 1.2 },
+      });
+    }
+    page.addShape("rect", {
+      x,
+      y,
+      w: cardW,
+      h: 1.45,
+      fill: { color: i === 0 ? colors[accent] : colors.panel2, transparency: i === 0 ? 0 : 5 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 14 },
+    });
+    page.addText(String(i + 1).padStart(2, "0"), {
+      x: x + 0.22,
+      y: y + 0.22,
+      w: 0.42,
+      h: 0.2,
+      fontSize: 9,
+      bold: true,
+      color: i === 0 ? colors.bg : colors[accent],
+      margin: 0,
+    });
+    page.addText(step, {
+      x: x + 0.24,
+      y: y + 0.72,
+      w: cardW - 0.48,
+      h: 0.42,
+      fit: "shrink",
+      fontSize: 12,
+      bold: true,
+      color: i === 0 ? colors.bg : colors.text,
+      margin: 0,
+    });
+  });
+
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderCaseStudy(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const labels = ["Situation", "Move", "Result"];
+  const items = (slide.body || ["Current constraint", "Recommended intervention", "Expected outcome"]).slice(0, 3);
+
+  labels.forEach((label, i) => {
+    const x = 0.82 + i * 3.95;
+    page.addShape("rect", {
+      x,
+      y: 2.42,
+      w: 3.35,
+      h: 2.4,
+      fill: { color: colors.panel2, transparency: 4 },
+      line: { color: i === 2 ? colors[accent] : colors.line, transparency: 14 },
+    });
+    page.addShape("rect", {
+      x,
+      y: 2.42,
+      w: 3.35,
+      h: 0.42,
+      fill: { color: i === 2 ? colors[accent] : colors.panel, transparency: i === 2 ? 0 : 2 },
+      line: { color: i === 2 ? colors[accent] : colors.line, transparency: 100 },
+    });
+    page.addText(label, {
+      x: x + 0.28,
+      y: 2.54,
+      w: 1.8,
+      h: 0.16,
+      fit: "shrink",
+      fontSize: 8,
+      bold: true,
+      color: i === 2 ? colors.bg : colors[accent],
+      margin: 0,
+    });
+    page.addText(items[i] || "", {
+      x: x + 0.3,
+      y: 3.22,
+      w: 2.62,
+      h: 0.92,
+      fit: "shrink",
+      fontSize: 15,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+  });
+
+  if (slide.metric) {
+    page.addText(`${slide.metric.label}: ${slide.metric.value}`, {
+      x: 0.9,
+      y: 5.18,
+      w: 5.4,
+      h: 0.28,
+      fit: "shrink",
+      fontSize: 11,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+  }
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderQuote(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  page.addShape("rect", {
+    x: 0.9,
+    y: 1.42,
+    w: 0.12,
+    h: 4.3,
+    fill: { color: colors[accent] },
+    line: { color: colors[accent] },
+  });
+  page.addText(slide.kicker || "Recommendation", {
+    x: 1.34,
+    y: 1.48,
+    w: 2.6,
+    h: 0.22,
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  page.addText(slide.title, {
+    x: 1.32,
+    y: 2.02,
+    w: 9.4,
+    h: 1.68,
+    fit: "shrink",
+    fontFace: "Aptos Display",
+    fontSize: template === "academicPaper" ? 25 : 31,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+  });
+  const support = slide.subtitle || slide.body?.[0] || slide.takeaway || "";
+  page.addText(support, {
+    x: 1.36,
+    y: 4.1,
+    w: 7.2,
+    h: 0.48,
+    fit: "shrink",
+    fontSize: 13,
+    color: colors.muted,
+    margin: 0,
+  });
+  if (slide.metric) {
+    addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
+  } else {
+    page.addShape("rect", {
+      x: 9.5,
+      y: 4.05,
+      w: 2.15,
+      h: 0.9,
+      fill: { color: colors.panel2, transparency: 5 },
+      line: { color: colors.line, transparency: 16 },
+    });
+    page.addText("Decision", {
+      x: 9.82,
+      y: 4.26,
+      w: 1.3,
+      h: 0.18,
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText("Now", {
+      x: 9.82,
+      y: 4.55,
+      w: 1.3,
+      h: 0.24,
+      fontSize: 14,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+  }
+}
+
+function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const cards = buildDashboardCards(slide);
+
+  cards.forEach((card, i) => {
+    const x = 0.82 + (i % 2) * 3.28;
+    const y = 2.18 + Math.floor(i / 2) * 1.42;
+    page.addShape("rect", {
+      x,
+      y,
+      w: 2.75,
+      h: 1.03,
+      fill: { color: colors.panel2, transparency: 4 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 14 },
+    });
+    page.addText(card.label, {
+      x: x + 0.26,
+      y: y + 0.2,
+      w: 1.7,
+      h: 0.18,
+      fit: "shrink",
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(card.value, {
+      x: x + 0.26,
+      y: y + 0.48,
+      w: 1.85,
+      h: 0.3,
+      fit: "shrink",
+      fontSize: 18,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+  });
+
+  const labels = slide.chart?.labels || cards.map((card) => card.label);
+  const values = slide.chart?.values || cards.map((_, i) => 55 + i * 11);
+  const max = Math.max(...values, 1);
+  page.addShape("rect", {
+    x: 7.72,
+    y: 2.0,
+    w: 3.9,
+    h: 3.35,
+    fill: { color: colors.panel2, transparency: 7 },
+    line: { color: colors.line, transparency: 16 },
+  });
+  page.addText(slide.chart?.title || "Operating signal", {
+    x: 8.05,
+    y: 2.32,
+    w: 2.7,
+    h: 0.22,
+    fit: "shrink",
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  values.slice(0, 5).forEach((value, i) => {
+    const w = 2.7 * (value / max);
+    const y = 2.9 + i * 0.42;
+    page.addText(labels[i] || "", {
+      x: 8.05,
+      y: y - 0.03,
+      w: 0.72,
+      h: 0.16,
+      fit: "shrink",
+      fontSize: 6.5,
+      color: colors.muted,
+      margin: 0,
+    });
+    page.addShape("rect", {
+      x: 8.88,
+      y,
+      w,
+      h: 0.16,
+      fill: { color: i === values.length - 1 ? colors[accent] : colors.cyan, transparency: 3 },
+      line: { color: colors.line, transparency: 100 },
+    });
+  });
+
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function buildDashboardCards(slide: DeckSlide) {
+  const body = slide.body || [];
+  const cards = [
+    { label: slide.metric?.label || "Primary", value: slide.metric?.value || body[0] || "01" },
+    { label: "Momentum", value: body[1] || "On track" },
+    { label: "Constraint", value: body[2] || "Known risk" },
+    { label: "Next move", value: body[3] || "Owner set" },
+  ];
+  return cards.map((card) => ({
+    label: card.label.length > 22 ? `${card.label.slice(0, 20)}...` : card.label,
+    value: card.value,
+  }));
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
