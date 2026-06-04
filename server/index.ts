@@ -4,6 +4,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getCreditCost, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
+import { createCanvaAuthorizationUrl, getCanvaRuntimeStatus, handleCanvaOAuthCallback } from "./canva";
 import { createSignedPptxUpload, savePptxFile } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { extractTextFromPptx } from "./pptxReader";
@@ -67,7 +68,7 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   res.json({
     ok: true,
     provider: getAIProvider(),
@@ -80,7 +81,45 @@ app.get("/api/health", (_req, res) => {
     generationMode: getGenerationMode(),
     maxSlides: getRuntimeMaxSlides(),
     emailDelivery: getEmailDeliveryMode(),
+    canva: await getCanvaRuntimeStatus(),
   });
+});
+
+app.get("/api/canva/status", async (_req, res) => {
+  res.json(await getCanvaRuntimeStatus());
+});
+
+app.get("/api/canva/oauth/start", async (req, res) => {
+  try {
+    if (!requireCanvaAdmin(req, res)) return;
+    res.redirect(await createCanvaAuthorizationUrl());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to start Canva authorization.";
+    res.status(400).send(message);
+  }
+});
+
+app.get("/api/canva/oauth/callback", async (req, res) => {
+  try {
+    const error = String(req.query.error || "");
+    if (error) {
+      res.status(400).send(`Canva authorization failed: ${error}`);
+      return;
+    }
+
+    const code = String(req.query.code || "");
+    const state = String(req.query.state || "");
+    if (!code || !state) {
+      res.status(400).send("Missing Canva authorization code or state.");
+      return;
+    }
+
+    await handleCanvaOAuthCallback(code, state);
+    res.send("Canva authorization completed. You can close this page and return to DeckEvo.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Canva authorization failed.";
+    res.status(400).send(message);
+  }
 });
 
 app.get("/api/session", async (req, res) => {
@@ -393,6 +432,17 @@ function getRuntimeMaxSlides() {
 
 function useNetlifyBackgroundWorker() {
   return process.env.NETLIFY_BACKGROUND_GENERATION !== "0";
+}
+
+function requireCanvaAdmin(req: express.Request, res: express.Response) {
+  const expected = process.env.CANVA_ADMIN_TOKEN;
+  if (!expected) return true;
+
+  const provided = String(req.query.admin || req.headers["x-canva-admin-token"] || "");
+  if (provided === expected) return true;
+
+  res.status(401).send("Unauthorized.");
+  return false;
 }
 
 async function enqueueBackgroundGeneration(
