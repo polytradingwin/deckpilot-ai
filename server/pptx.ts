@@ -450,57 +450,49 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     });
   }
 
+  const hasSideRule = template === "productNeon" || template === "dataGrid";
+  const titleX = hasSideRule ? 1.18 : 0.78;
+  const titleW = hasSideRule ? 7.25 : 8.8;
+  const titleFont = coverTitleFontSize(slide.title);
+
   page.addText(slide.title, {
-    x: 0.72,
-    y: 1.55,
-    w: 10.9,
-    h: 1.55,
+    x: titleX,
+    y: 1.48,
+    w: titleW,
+    h: 2.15,
     fit: "shrink",
     fontFace: "Microsoft YaHei",
-    fontSize: 42,
+    fontSize: titleFont,
     bold: true,
     color: colors.text,
     margin: 0,
-    breakLine: false,
   });
   page.addText(slide.subtitle || "", {
-    x: 0.78,
-    y: 3.18,
-    w: 8.8,
-    h: 0.5,
+    x: titleX,
+    y: 3.72,
+    w: Math.min(titleW, 7.5),
+    h: 0.48,
     fit: "shrink",
-    fontSize: 16,
+    fontSize: 13,
     color: colors.muted,
     margin: 0,
   });
-  addBulletPanel(page, slide.body || [], 0.78, 4.42, 5.8, accent);
+  addBulletPanel(page, slide.body || [], titleX, 4.72, 5.7, accent);
+
   page.addShape("rect", {
-    x: 8.3,
-    y: 3.82,
-    w: 3.9,
-    h: 1.65,
-    fill: { color: colors.panel2, transparency: 6 },
-    line: { color: colors.line, transparency: 12 },
+    x: 9.08,
+    y: 1.25,
+    w: 2.85,
+    h: 4.95,
+    fill: { color: colors.panel2, transparency: 16 },
+    line: { color: colors.line, transparency: 20 },
   });
-  page.addText("Generated deck", {
-    x: 8.72,
-    y: 4.25,
-    w: 2.8,
-    h: 0.26,
-    fontSize: 10,
-    bold: true,
-    color: colors[accent],
-    margin: 0,
-  });
-  page.addText("Editable .pptx", {
-    x: 8.72,
-    y: 4.72,
-    w: 2.8,
-    h: 0.34,
-    fontSize: 18,
-    bold: true,
-    color: colors.text,
-    margin: 0,
+  page.addShape("line", {
+    x: 9.38,
+    y: 5.72,
+    w: 2.25,
+    h: 0,
+    line: { color: colors[accent], transparency: 18, width: 2 },
   });
 }
 
@@ -1600,6 +1592,7 @@ function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: nu
   const rows = items.length ? items.slice(0, 5) : ["核心观点", "支撑证据", "下一步行动"];
   rows.forEach((item, i) => {
     const top = y + i * 0.58;
+    const fontSize = denseTextFontSize(item, 15);
     page.addShape("ellipse", {
       x,
       y: top + 0.05,
@@ -1614,10 +1607,9 @@ function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: nu
       w,
       h: 0.32,
       fit: "shrink",
-      fontSize: 15,
+      fontSize,
       color: colors.text,
       margin: 0,
-      breakLine: false,
     });
   });
 }
@@ -1695,14 +1687,34 @@ function titleOptions(): PptxGenJS.TextPropsOptions {
   return {
     x: 0.72,
     y: 1.05,
-    w: 9.6,
-    h: 0.78,
+    w: 9.1,
+    h: 0.95,
     fit: "shrink",
     fontFace: "Microsoft YaHei",
-    fontSize: 28,
+    fontSize: 26,
     bold: true,
     color: colors.text,
     margin: 0,
   };
+}
+
+function coverTitleFontSize(text: string) {
+  const length = visualLength(text);
+  if (length > 36) return 27;
+  if (length > 30) return 30;
+  if (length > 24) return 34;
+  return 38;
+}
+
+function denseTextFontSize(text: string, base: number) {
+  const length = visualLength(text);
+  if (length > 34) return Math.max(10.5, base - 4);
+  if (length > 26) return Math.max(11.5, base - 3);
+  if (length > 20) return Math.max(12.5, base - 2);
+  return base;
+}
+
+function visualLength(text: string) {
+  return Array.from(String(text || "")).reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 1.7 : 1), 0);
 }
 

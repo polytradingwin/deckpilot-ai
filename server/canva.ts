@@ -117,6 +117,7 @@ export async function processPptxWithCanva(file: Buffer, filename: string) {
   try {
     const token = await getValidAccessToken();
     const title = normalizeCanvaTitle(filename);
+    console.log(`Canva finalization started: ${title}, draftBytes=${file.byteLength}`);
     const importJob = await createImportJob(token, file, title);
     const imported = await pollImportJob(token, importJob.id);
     const designId = imported.result?.designs?.[0]?.id;
@@ -131,7 +132,9 @@ export async function processPptxWithCanva(file: Buffer, filename: string) {
       throw new Error("Canva export completed without a download URL.");
     }
 
-    return await downloadExportedPptx(downloadUrl);
+    const finalized = await downloadExportedPptx(downloadUrl);
+    console.log(`Canva finalization succeeded: ${title}, finalBytes=${finalized.byteLength}`);
+    return finalized;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Canva processing failed.";
     return handleCanvaBypassOrFailure(message, file);
