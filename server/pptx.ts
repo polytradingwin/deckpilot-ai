@@ -283,6 +283,26 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
+  if (slide.layout === "splitStory") {
+    renderSplitStory(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "threeCards") {
+    renderThreeCards(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "beforeAfter") {
+    renderBeforeAfter(page, slide, accent);
+    return;
+  }
+
+  if (slide.layout === "insightGrid") {
+    renderInsightGrid(page, slide, accent);
+    return;
+  }
+
   if (slide.layout === "process") {
     renderProcess(page, slide, accent);
     return;
@@ -1024,6 +1044,243 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
   });
 
   addBulletPanel(page, slide.body || [], 0.8, 3.78, 5.15, accent);
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderSplitStory(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = slide.body?.length ? slide.body : ["Current state", "Target state", "Decision implication"];
+  const left = items.slice(0, Math.ceil(items.length / 2));
+  const right = items.slice(Math.ceil(items.length / 2));
+
+  renderStoryColumn(page, "Current logic", left, 0.82, 2.18, accent, false);
+  renderStoryColumn(page, "Better path", right.length ? right : [slide.takeaway || "Clarify the next move"], 7.02, 2.18, accent, true);
+
+  page.addShape("line", {
+    x: 6.45,
+    y: 2.12,
+    w: 0,
+    h: 3.45,
+    line: { color: colors[accent], transparency: 28, width: 1.1 },
+  });
+  page.addText("→", {
+    x: 6.15,
+    y: 3.35,
+    w: 0.6,
+    h: 0.46,
+    fontSize: 22,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+    align: "center",
+  });
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderStoryColumn(page: PptxGenJS.Slide, label: string, items: string[], x: number, y: number, accent: Accent, highlighted: boolean) {
+  page.addShape("rect", {
+    x,
+    y,
+    w: 4.72,
+    h: 3.35,
+    fill: { color: highlighted ? colors[accent] : colors.panel2, transparency: highlighted ? 82 : 4 },
+    line: { color: highlighted ? colors[accent] : colors.line, transparency: highlighted ? 24 : 14 },
+  });
+  page.addText(label, {
+    x: x + 0.34,
+    y: y + 0.32,
+    w: 2.8,
+    h: 0.24,
+    fit: "shrink",
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  items.slice(0, 3).forEach((item, i) => {
+    page.addText(item, {
+      x: x + 0.34,
+      y: y + 0.88 + i * 0.72,
+      w: 3.95,
+      h: 0.38,
+      fit: "shrink",
+      fontSize: 13,
+      bold: i === 0,
+      color: colors.text,
+      margin: 0,
+      breakLine: false,
+    });
+  });
+}
+
+function renderThreeCards(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  if (slide.subtitle) {
+    page.addText(slide.subtitle, {
+      x: 0.76,
+      y: 1.88,
+      w: 7.8,
+      h: 0.32,
+      fit: "shrink",
+      fontSize: 11,
+      color: colors.muted,
+      margin: 0,
+    });
+  }
+  const items = (slide.body?.length ? slide.body : ["Pillar one", "Pillar two", "Pillar three"]).slice(0, 3);
+  items.forEach((item, i) => {
+    const x = 0.82 + i * 3.95;
+    const isLead = i === 0;
+    page.addShape("rect", {
+      x,
+      y: 2.58,
+      w: 3.35,
+      h: 2.42,
+      fill: { color: isLead ? colors[accent] : colors.panel2, transparency: isLead ? 78 : 4 },
+      line: { color: isLead ? colors[accent] : colors.line, transparency: isLead ? 16 : 14 },
+    });
+    page.addText(String(i + 1).padStart(2, "0"), {
+      x: x + 0.34,
+      y: 2.9,
+      w: 0.52,
+      h: 0.24,
+      fontSize: 11,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(item, {
+      x: x + 0.34,
+      y: 3.52,
+      w: 2.58,
+      h: 0.82,
+      fit: "shrink",
+      fontSize: 16,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+      breakLine: false,
+    });
+  });
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = slide.body?.length ? slide.body : ["Before: fragmented material", "After: structured executive deck", "Result: clearer decision path"];
+  const before = items[0] || "Before";
+  const after = items[1] || slide.takeaway || "After";
+  const result = items[2] || slide.metric?.context || "Result";
+
+  page.addShape("rect", {
+    x: 0.82,
+    y: 2.35,
+    w: 4.55,
+    h: 2.55,
+    fill: { color: colors.panel2, transparency: 5 },
+    line: { color: colors.line, transparency: 12 },
+  });
+  page.addShape("rect", {
+    x: 7.0,
+    y: 2.35,
+    w: 4.55,
+    h: 2.55,
+    fill: { color: colors[accent], transparency: 82 },
+    line: { color: colors[accent], transparency: 14 },
+  });
+  addBeforeAfterBlock(page, "Before", before, 1.18, 2.82, accent, false);
+  addBeforeAfterBlock(page, "After", after, 7.36, 2.82, accent, true);
+  page.addText("→", {
+    x: 5.78,
+    y: 3.33,
+    w: 0.7,
+    h: 0.52,
+    fontSize: 26,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+    align: "center",
+  });
+  page.addText(result, {
+    x: 2.05,
+    y: 5.32,
+    w: 8.65,
+    h: 0.42,
+    fit: "shrink",
+    fontSize: 15,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+    align: "center",
+  });
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function addBeforeAfterBlock(page: PptxGenJS.Slide, label: string, text: string, x: number, y: number, accent: Accent, highlighted: boolean) {
+  page.addText(label, {
+    x,
+    y,
+    w: 1.4,
+    h: 0.22,
+    fontSize: 9,
+    bold: true,
+    color: colors[accent],
+    margin: 0,
+  });
+  page.addText(text, {
+    x,
+    y: y + 0.62,
+    w: 3.42,
+    h: 0.84,
+    fit: "shrink",
+    fontSize: highlighted ? 17 : 15,
+    bold: true,
+    color: colors.text,
+    margin: 0,
+    breakLine: false,
+  });
+}
+
+function renderInsightGrid(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+  page.addText(slide.title, titleOptions());
+  const items = (slide.body?.length ? slide.body : ["Insight one", "Insight two", "Insight three", "Insight four"]).slice(0, 4);
+  const labels = ["Signal", "Evidence", "Risk", "Move"];
+
+  items.forEach((item, i) => {
+    const x = 0.82 + (i % 2) * 5.1;
+    const y = 2.2 + Math.floor(i / 2) * 1.55;
+    page.addShape("rect", {
+      x,
+      y,
+      w: 4.52,
+      h: 1.12,
+      fill: { color: colors.panel2, transparency: 4 },
+      line: { color: i === 0 ? colors[accent] : colors.line, transparency: 14 },
+    });
+    page.addText(labels[i] || `Insight ${i + 1}`, {
+      x: x + 0.28,
+      y: y + 0.2,
+      w: 1.2,
+      h: 0.18,
+      fit: "shrink",
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(item, {
+      x: x + 0.28,
+      y: y + 0.52,
+      w: 3.68,
+      h: 0.36,
+      fit: "shrink",
+      fontSize: 12.5,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+      breakLine: false,
+    });
+  });
   addTakeaway(page, slide.takeaway, accent);
 }
 

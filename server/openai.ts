@@ -51,6 +51,10 @@ const deckSchema = {
               "timeline",
               "matrix",
               "heroMetric",
+              "splitStory",
+              "threeCards",
+              "beforeAfter",
+              "insightGrid",
               "process",
               "caseStudy",
               "quote",
@@ -279,11 +283,12 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
 function buildSystemPrompt() {
   if (process.env.DECKPILOT_LONG_WORKER !== "1") {
     return [
-      "You are a senior presentation strategist and visual information designer.",
-      "Create a concise, business-ready PowerPoint outline with strong narrative structure.",
+      "You are a senior presentation strategist, executive editor, and visual information designer.",
+      "Create concise, business-ready PowerPoint decks with strong narrative structure, visual hierarchy, and clear decision value.",
       "Return only valid JSON that matches the supplied schema.",
       "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
       "Choose a visual template that fits the user's material instead of reusing the same look for every deck.",
+      "Quality bar: every slide must have one dominant message, a reason to exist, and a visual structure that makes the message easier to understand.",
     ].join("\n");
   }
 
@@ -294,6 +299,7 @@ function buildSystemPrompt() {
     "A strong deck should feel like a finished consultant/business presentation, not a generic AI outline.",
     "Select a distinct visual template based on the content, audience, and style request. Do not default to the same template every time.",
     "Use a narrative spine: situation, complication, insight, recommendation, proof, rollout, risks, decision.",
+    "Apply design taste: restrained typography, high contrast, strong spacing, compact labels, no text dumping, no decorative clutter.",
     "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
     "Design for editable PowerPoint: short text, strong hierarchy, one key message per slide, and layouts that can be rendered as shapes, text, and simple charts.",
     "Return only valid JSON matching the supplied deck structure. No markdown, no prose outside JSON.",
@@ -407,9 +413,12 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...sourceSpecificRequirements(input),
     ...structureRequirements(input),
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
-    "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages.",
+    "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy or beforeAfter for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, splitStory for two-sided reasoning, threeCards for 3 pillars, insightGrid for 4 related insights.",
+    "- Content-to-layout rules: numbers/KPIs -> heroMetric/dashboard/chart; steps/process/time -> process/timeline; pros/cons or old/new -> comparison/beforeAfter/splitStory; 3 capabilities/pillars -> threeCards; 4 findings/risks/priorities -> insightGrid/matrix; strong recommendation -> quote/closing.",
     "- Dashboard cards must be short metric summaries, not pasted raw paragraphs. Keep each dashboard card value under 18 Chinese characters or 8 English words.",
     "- Never put long source sentences into metric.value. Use metric.value only for a number, short status, or compact phrase; move detail into body, takeaway, or speaker notes.",
+    "- Avoid using content layout repeatedly. A premium deck should alternate large-message pages, dense evidence pages, and structured explanation pages.",
+    "- Do not overfill boxes. If a sentence is long, rewrite it into a short claim and put context in speakerNotes.",
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
     "- Add a short takeaway to most non-cover slides.",
@@ -437,7 +446,7 @@ function structureRequirements(input: PresentationRequest) {
     return [
       "- Preserve the uploaded deck's page order unless the user explicitly asks for a new order.",
       "- Use layouts that fit each original slide's purpose; do not force a cover/agenda/executive-summary pattern if the source deck does not support it.",
-      "- Use richer layout plugins where appropriate: dashboard for KPI-heavy source slides, process for workflow slides, caseStudy for example/outcome slides, heroMetric for a dominant number or claim.",
+      "- Use richer layout plugins where appropriate: dashboard for KPI-heavy source slides, process for workflow slides, caseStudy or beforeAfter for example/outcome slides, heroMetric for a dominant number or claim, splitStory for two-side reasoning.",
       "- For each output slide, transform the corresponding source content into clearer executive language and better visual hierarchy.",
     ];
   }
@@ -445,7 +454,7 @@ function structureRequirements(input: PresentationRequest) {
   return [
     "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
-    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix for priorities or risk mapping, quote for decisive recommendations.",
+    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison/beforeAfter for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix/insightGrid for priorities or risk mapping, threeCards for pillars, quote for decisive recommendations.",
   ];
 }
 
@@ -617,14 +626,57 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     });
   }
 
+  const enhancedSlides = slides.map((slide, index) => ({
+    ...slide,
+    layout: improveLayoutForContent(slide, index, targetCount, input),
+    body: trimSlideBody(slide.body),
+  }));
+
   return {
     title: deck.title || fallbackTitle(input, 0),
     subtitle: deck.subtitle || "AI-generated presentation",
     language: deck.language || input.language,
     audience: deck.audience || input.audience,
     theme: normalizeTheme(deck.theme, input),
-    slides,
+    slides: enhancedSlides,
   };
+}
+
+function improveLayoutForContent(
+  slide: DeckSpec["slides"][number],
+  index: number,
+  total: number,
+  input: PresentationRequest,
+): DeckSpec["slides"][number]["layout"] {
+  if (index === 0 && input.source !== "ppt") return "cover";
+  if (index === total - 1 && input.source !== "ppt") return "closing";
+  if (slide.layout !== "content" && slide.layout !== "executiveSummary") return slide.layout;
+
+  const text = [slide.title, slide.subtitle, ...(slide.body || []), slide.takeaway, slide.visual].filter(Boolean).join(" ");
+  const hasNumber = /[\d０-９]+(?:[,.，]\d+)*(?:%|％|倍|x|X|万|亿|人|天|周|月|年|元|美元|条|次|家|页)?/.test(text);
+  const hasProcess = /(流程|步骤|路径|阶段|计划|推进|落地|执行|上线|timeline|roadmap|phase|step|process)/i.test(text);
+  const hasComparison = /(对比|相比|差异|权衡|取舍|before|after|versus|vs\.?|竞品|优劣|利弊|旧|新)/i.test(text);
+  const hasCase = /(案例|客户|结果|成效|转化|复盘|story|case|result|outcome)/i.test(text);
+  const itemCount = slide.body?.length || 0;
+
+  if (hasComparison && hasCase) return "beforeAfter";
+  if (hasComparison) return "splitStory";
+  if (hasProcess) return "process";
+  if (hasNumber && itemCount >= 3) return "dashboard";
+  if (hasNumber) return "heroMetric";
+  if (itemCount === 3) return "threeCards";
+  if (itemCount >= 4) return "insightGrid";
+  return slide.layout;
+}
+
+function trimSlideBody(body: string[] | undefined) {
+  if (!body?.length) return body;
+  return body.slice(0, 5).map((item) => compactPromptText(item, 82));
+}
+
+function compactPromptText(value: string, maxLength: number) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
 function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: PresentationRequest): DeckSpec["theme"] {
@@ -652,6 +704,8 @@ function fallbackLayout(index: number, total: number): DeckSpec["slides"][number
   if (index === 1) return "agenda";
   if (index === total - 1) return "closing";
   if (index === 2) return "executiveSummary";
+  if (index % 11 === 0) return "beforeAfter";
+  if (index % 10 === 0) return "splitStory";
   if (index % 9 === 0) return "caseStudy";
   if (index % 8 === 0) return "quote";
   if (index % 7 === 0) return "timeline";
@@ -659,6 +713,7 @@ function fallbackLayout(index: number, total: number): DeckSpec["slides"][number
   if (index % 5 === 0) return "matrix";
   if (index % 4 === 0) return "chart";
   if (index % 3 === 0) return "process";
+  if (index % 2 === 0) return "threeCards";
   return "content";
 }
 
