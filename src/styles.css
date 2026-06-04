@@ -600,6 +600,7 @@ main {
 
 .panel-actions.split {
   justify-content: space-between;
+  gap: 18px;
 }
 
 .text-button {
@@ -642,11 +643,26 @@ main {
 
 .back-action {
   width: auto;
-  min-width: 126px;
+  min-width: 0;
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 8px;
   margin-top: 0;
-  border-color: rgba(215, 185, 129, 0.34);
+  border: 0;
   color: var(--gold);
-  background: rgba(215, 185, 129, 0.08);
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.back-action:hover {
+  color: #e4c996;
+  background: rgba(215, 185, 129, 0.06);
+}
+
+.panel-actions.split .primary-button {
+  margin-left: auto;
 }
 
 .settings-grid {
@@ -1144,6 +1160,10 @@ main {
 .primary-button.wide,
 .outline-button {
   width: 100%;
+}
+
+.outline-button.back-action {
+  width: auto;
 }
 
 .trust-section {
