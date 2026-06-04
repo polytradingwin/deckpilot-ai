@@ -222,7 +222,7 @@ const policyContent: Record<PolicyPage, { title: string; updated: string; sectio
     sections: [
       {
         heading: "Service",
-        body: "DeckPilot AI helps users transform uploaded PowerPoint files, scripts, outlines, and related instructions into editable presentation files. You are responsible for making sure the materials you upload are yours or that you have permission to use them.",
+        body: "DeckEvo helps users transform uploaded PowerPoint files, scripts, outlines, and related instructions into editable presentation files. You are responsible for making sure the materials you upload are yours or that you have permission to use them.",
       },
       {
         heading: "Account",
@@ -321,7 +321,7 @@ function App() {
   const [generated, setGenerated] = useState(false);
   const [generationError, setGenerationError] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
-  const [downloadName, setDownloadName] = useState("deckpilot-presentation.pptx");
+  const [downloadName, setDownloadName] = useState("deckevo-presentation.pptx");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [generationId, setGenerationId] = useState("");
   const [recentGenerations, setRecentGenerations] = useState<GenerationRecord[]>([]);
@@ -494,8 +494,8 @@ function App() {
 
       const blob = await response.blob();
       const nextUrl = URL.createObjectURL(blob);
-      const deckTitle = decodeURIComponent(response.headers.get("X-Deck-Title") || "deckpilot-presentation");
-      const nextName = `${deckTitle.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").slice(0, 80) || "deckpilot-presentation"}.pptx`;
+      const deckTitle = decodeURIComponent(response.headers.get("X-Deck-Title") || "deckevo-presentation");
+      const nextName = `${deckTitle.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").slice(0, 80) || "deckevo-presentation"}.pptx`;
       const nextGenerationId = response.headers.get("X-Generation-Id") || "";
 
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -656,9 +656,9 @@ function App() {
   return (
     <main>
       <header className="site-header">
-        <a className="brand" href="#top" aria-label="DeckPilot AI 首页">
+        <a className="brand" href="#top" aria-label="DeckEvo 首页">
           <span className="brand-mark" />
-          <span>DeckPilot AI</span>
+          <span>DeckEvo</span>
         </a>
 
         <nav className="header-nav" aria-label="主导航">
@@ -696,12 +696,10 @@ function App() {
         <div className="hero-content">
           <p className="eyebrow">PPT generation for serious work</p>
           <h1>
-            AI PPT 生成器
-            <span>把任何材料变成高质量演示</span>
+            你的内容，配得上更好的 PPT
           </h1>
           <p className="hero-copy">
-            面向销售方案、融资路演、内部汇报和课程培训。先重构叙事，再生成版式、图表和可编辑
-            PowerPoint。
+            上传即生成PPT，背后是一套经过千份演示训练的审美判断
           </p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={scrollToGenerator}>
@@ -1038,7 +1036,7 @@ function App() {
 
       <footer className="site-footer">
         <div>
-          <span>DeckPilot AI</span>
+          <span>DeckEvo</span>
           <small>service@deckevo.com</small>
         </div>
         <div className="footer-links">
@@ -1061,7 +1059,7 @@ function App() {
             <button className="icon-button" type="button" onClick={() => setLegalPage(null)} aria-label="关闭">
               <X size={18} />
             </button>
-            <p className="section-kicker">DeckPilot AI</p>
+            <p className="section-kicker">DeckEvo</p>
             <h2 id="policy-title">{policyContent[legalPage].title}</h2>
             <small>{policyContent[legalPage].updated}</small>
             <div className="policy-sections">
@@ -1083,7 +1081,7 @@ function App() {
               <X size={18} />
             </button>
             <Mail size={24} />
-            <h2 id="login-title">{authStep === "email" ? "登录 DeckPilot AI" : "输入验证码"}</h2>
+            <h2 id="login-title">{authStep === "email" ? "登录 DeckEvo" : "输入验证码"}</h2>
             <p>{authStep === "email" ? "输入邮箱后，我们会发送 6 位验证码，用于保存生成记录和试用额度。" : "验证码 10 分钟内有效。没有收到时可以返回重新发送。"}</p>
             <label>
               <span>邮箱</span>
@@ -1104,7 +1102,7 @@ function App() {
                 <input
                   inputMode="numeric"
                   maxLength={6}
-                  placeholder="000000"
+                  placeholder=""
                   value={verificationCode}
                   onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                   onKeyDown={(event) => {

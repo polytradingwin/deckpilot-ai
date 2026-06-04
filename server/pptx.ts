@@ -88,13 +88,13 @@ type Accent = "gold" | "cyan" | "sage";
 export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   const pptx = new PptxGen();
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "DeckPilot AI";
-  pptx.company = "DeckPilot AI";
+  pptx.author = "DeckEvo";
+  pptx.company = "DeckEvo";
   pptx.subject = deck.subtitle;
   pptx.title = deck.title;
   pptx.theme = {
-    headFontFace: "Aptos Display",
-    bodyFontFace: "Aptos",
+    headFontFace: "Microsoft YaHei",
+    bodyFontFace: "Microsoft YaHei",
   };
   pptx.defineLayout({ name: "LAYOUT_WIDE", width: 13.333, height: 7.5 });
 
@@ -312,12 +312,12 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
 }
 
 function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent) {
-  page.addText(slide.kicker || "DeckPilot AI", {
+  page.addText(slide.kicker || "DeckEvo", {
     x: 0.72,
     y: 0.48,
     w: 7.6,
     h: 0.24,
-    fontFace: "Aptos",
+    fontFace: "Microsoft YaHei",
     fontSize: 8,
     bold: true,
     color: colors[accent],
@@ -330,7 +330,7 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
     w: 1.5,
     h: 0.28,
     align: "right",
-    fontFace: "Aptos",
+    fontFace: "Microsoft YaHei",
     fontSize: 8,
     color: colors.muted,
     margin: 0,
@@ -339,7 +339,7 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
 
 function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
   if (template === "editorialLight") {
-    page.addText(slide.kicker || "DeckPilot AI", {
+    page.addText(slide.kicker || "DeckEvo", {
       x: 0.82,
       y: 1.02,
       w: 2.8,
@@ -355,7 +355,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       w: 7.15,
       h: 1.72,
       fit: "shrink",
-      fontFace: "Aptos Display",
+      fontFace: "Microsoft YaHei",
       fontSize: 39,
       bold: true,
       color: colors.text,
@@ -390,7 +390,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       w: 10.05,
       h: 1.42,
       fit: "shrink",
-      fontFace: "Aptos Display",
+      fontFace: "Microsoft YaHei",
       fontSize: 34,
       bold: true,
       color: colors.text,
@@ -436,7 +436,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     w: 10.9,
     h: 1.55,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 42,
     bold: true,
     color: colors.text,
@@ -492,7 +492,7 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
       w: 10.4,
       h: 0.76,
       fit: "shrink",
-      fontFace: "Aptos Display",
+      fontFace: "Microsoft YaHei",
       fontSize: template === "academicPaper" ? 24 : 27,
       bold: true,
       color: colors.text,
@@ -521,7 +521,7 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
     w: 7.9,
     h: 0.88,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 28,
     bold: true,
     color: colors.text,
@@ -658,7 +658,7 @@ function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
       w: 8.8,
       h: 1.18,
       fit: "shrink",
-      fontFace: "Aptos Display",
+      fontFace: "Microsoft YaHei",
       fontSize: 31,
       bold: true,
       color: colors.text,
@@ -701,7 +701,7 @@ function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
     w: 9.4,
     h: 1.35,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 34,
     bold: true,
     color: colors.text,
@@ -726,7 +726,7 @@ function renderClosing(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
     w: 9.6,
     h: 0.95,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 30,
     bold: true,
     color: colors.text,
@@ -963,7 +963,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     w: 6.25,
     h: 1.15,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: template === "academicPaper" ? 25 : 31,
     bold: true,
     color: colors.text,
@@ -1006,7 +1006,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     w: 3.45,
     h: 0.9,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 39,
     bold: true,
     color: colors.text,
@@ -1181,7 +1181,7 @@ function renderQuote(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     w: 9.4,
     h: 1.68,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: template === "academicPaper" ? 25 : 31,
     bold: true,
     color: colors.text,
@@ -1249,25 +1249,26 @@ function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent
     });
     page.addText(card.label, {
       x: x + 0.26,
-      y: y + 0.2,
-      w: 1.7,
+      y: y + 0.16,
+      w: 2.16,
       h: 0.18,
       fit: "shrink",
-      fontSize: 8,
+      fontSize: 7.2,
       bold: true,
       color: colors[accent],
       margin: 0,
     });
     page.addText(card.value, {
       x: x + 0.26,
-      y: y + 0.48,
-      w: 1.85,
-      h: 0.3,
+      y: y + 0.42,
+      w: 2.18,
+      h: 0.42,
       fit: "shrink",
-      fontSize: 18,
-      bold: true,
+      fontSize: 10,
+      bold: false,
       color: colors.text,
       margin: 0,
+      breakLine: false,
     });
   });
 
@@ -1302,7 +1303,7 @@ function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent
       w: 0.72,
       h: 0.16,
       fit: "shrink",
-      fontSize: 6.5,
+      fontSize: 6,
       color: colors.muted,
       margin: 0,
     });
@@ -1328,9 +1329,14 @@ function buildDashboardCards(slide: DeckSlide) {
     { label: "Next move", value: body[3] || "Owner set" },
   ];
   return cards.map((card) => ({
-    label: card.label.length > 22 ? `${card.label.slice(0, 20)}...` : card.label,
-    value: card.value,
+    label: compactText(card.label, 18),
+    value: compactText(card.value, 52),
   }));
+}
+
+function compactText(value: string, maxLength: number) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
@@ -1435,10 +1441,11 @@ function titleOptions(): PptxGenJS.TextPropsOptions {
     w: 9.6,
     h: 0.78,
     fit: "shrink",
-    fontFace: "Aptos Display",
+    fontFace: "Microsoft YaHei",
     fontSize: 28,
     bold: true,
     color: colors.text,
     margin: 0,
   };
 }
+

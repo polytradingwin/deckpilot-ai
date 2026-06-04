@@ -6,7 +6,7 @@ export type LoginCodeDelivery = {
   provider?: string;
 };
 
-const loginCodeSubject = "DeckPilot AI 登录验证码";
+const loginCodeSubject = "DeckEvo 登录验证码";
 
 export async function sendLoginCodeEmail(email: string, code: string): Promise<LoginCodeDelivery> {
   if (hasResendConfig()) {
@@ -85,13 +85,13 @@ async function sendWithResend(email: string, code: string) {
 }
 
 function loginCodeText(code: string) {
-  return `你的 DeckPilot AI 登录验证码是 ${code}。验证码 10 分钟内有效。如果不是你本人操作，可以忽略这封邮件。`;
+  return `你的 DeckEvo 登录验证码是 ${code}。验证码 10 分钟内有效。如果不是你本人操作，可以忽略这封邮件。`;
 }
 
 function loginCodeHtml(code: string) {
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.7;color:#111827">
-      <p>你的 DeckPilot AI 登录验证码是：</p>
+      <p>你的 DeckEvo 登录验证码是：</p>
       <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
       <p>验证码 10 分钟内有效。如果不是你本人操作，可以忽略这封邮件。</p>
     </div>
@@ -99,7 +99,7 @@ function loginCodeHtml(code: string) {
 }
 
 function getMailFrom() {
-  return process.env.EMAIL_FROM || process.env.SMTP_FROM || "DeckPilot AI <service@deckevo.com>";
+  return process.env.EMAIL_FROM || process.env.SMTP_FROM || "DeckEvo <service@deckevo.com>";
 }
 
 function hasResendConfig() {

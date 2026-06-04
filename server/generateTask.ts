@@ -8,7 +8,7 @@ import { saveGeneration } from "./store";
 export async function generateAndSaveDeck(userId: string, input: PresentationRequest, options: { id?: string } = {}) {
   const creditCost = getCreditCost(input.slides);
   const { deck, file } = await createRenderedDeckWithValidation(input);
-  const filename = safeFilename(deck.title || "deckpilot-presentation");
+  const filename = safeFilename(deck.title || "deckevo-presentation");
   const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: options.id });
   await consumeCredits(userId, creditCost);
   const updatedUser = await getUserById(userId);
@@ -83,7 +83,7 @@ export function safeFilename(name: string) {
   return name
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
     .replace(/\s+/g, "-")
-    .slice(0, 80) || "deckpilot-presentation";
+    .slice(0, 80) || "deckevo-presentation";
 }
 
 export function safeAsciiFilename(name: string) {
@@ -93,6 +93,6 @@ export function safeAsciiFilename(name: string) {
       .replace(/[^\w.-]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 80) || "deckpilot-presentation"
+      .slice(0, 80) || "deckevo-presentation"
   );
 }

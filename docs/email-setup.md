@@ -1,4 +1,4 @@
-# DeckPilot AI official email setup
+# DeckEvo official email setup
 
 Target address: `service@deckevo.com`
 
@@ -12,7 +12,7 @@ The application is ready to send login verification codes from `service@deckevo.
 
 ```env
 RESEND_API_KEY=re_...
-EMAIL_FROM="DeckPilot AI <service@deckevo.com>"
+EMAIL_FROM="DeckEvo <service@deckevo.com>"
 EMAIL_DEV_CODE=0
 ```
 
@@ -24,7 +24,7 @@ SMTP_PORT=587
 SMTP_SECURE=0
 SMTP_USER=service@deckevo.com
 SMTP_PASS=your_smtp_password
-SMTP_FROM="DeckPilot AI <service@deckevo.com>"
+SMTP_FROM="DeckEvo <service@deckevo.com>"
 EMAIL_DEV_CODE=0
 ```
 
@@ -65,13 +65,13 @@ After SMTP is ready, update `/home/deckpilot/apps/deckpilot-ai/.env.local` on th
 ```env
 EMAIL_DEV_CODE=0
 RESEND_API_KEY=...
-EMAIL_FROM="DeckPilot AI <service@deckevo.com>"
+EMAIL_FROM="DeckEvo <service@deckevo.com>"
 SMTP_HOST=...
 SMTP_PORT=587
 SMTP_SECURE=0
 SMTP_USER=service@deckevo.com
 SMTP_PASS=...
-SMTP_FROM="DeckPilot AI <service@deckevo.com>"
+SMTP_FROM="DeckEvo <service@deckevo.com>"
 ```
 
 Then restart:

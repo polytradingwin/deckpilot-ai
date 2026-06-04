@@ -288,7 +288,7 @@ const isDirectRun = entrypoint.endsWith("/server/index.ts") || entrypoint.endsWi
 
 if (isDirectRun) {
   app.listen(port, "127.0.0.1", () => {
-    console.log(`DeckPilot API listening on http://127.0.0.1:${port}`);
+    console.log(`DeckEvo API listening on http://127.0.0.1:${port}`);
   });
 }
 
