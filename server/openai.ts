@@ -1,5 +1,6 @@
 import { ProxyAgent, setGlobalDispatcher } from "undici";
 import type { DeckSpec, PresentationRequest } from "../src/shared/deck";
+import { isOpenAIQuotaOrRateLimit } from "./userErrors";
 
 export const DEFAULT_MODEL = "gpt-5.2";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
@@ -201,6 +202,9 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`${model}: ${message}`);
+        if (isOpenAIQuotaOrRateLimit(message)) {
+          throw new Error(message);
+        }
         if (message.includes("OPENAI_API_KEY") || message.includes("API Key")) {
           break;
         }
@@ -346,7 +350,7 @@ async function formatOpenAIError(response: Response, model: string) {
     return `OpenAI model is not available for this key: ${model}. Change OPENAI_MODEL in .env.local.`;
   }
   if (response.status === 429) {
-    return `OpenAI rate limit or quota was reached. Check billing, project limits, and usage. ${message}`;
+    return `OpenAI quota or rate limit was reached. ${message}`;
   }
 
   return `OpenAI API request failed: ${message}`;

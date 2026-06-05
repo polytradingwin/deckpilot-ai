@@ -12,6 +12,7 @@ import { withUploadedPptxText } from "./queuedGeneration";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
 import { getEmailDeliveryMode } from "./email";
+import { toUserFacingError } from "./userErrors";
 import type { PresentationRequest } from "../src/shared/deck";
 
 const appRoot = process.cwd();
@@ -266,7 +267,7 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
     }
     res.send(file);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate PPT.";
+    const message = toUserFacingError(error);
     console.error(error);
     res.status(400).json({ error: message });
   }

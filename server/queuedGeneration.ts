@@ -3,6 +3,7 @@ import { generateAndSaveDeck } from "./generateTask";
 import { readPptxFile } from "./fileStorage";
 import { extractTextFromPptx } from "./pptxReader";
 import { updateGenerationJob } from "./store";
+import { toUserFacingError } from "./userErrors";
 
 export type QueuedSourceFile = {
   storedFilename: string;
@@ -47,7 +48,7 @@ export async function runQueuedGeneration(payload: ValidQueuedGenerationPayload)
     await generateAndSaveDeck(payload.userId, input, { id: payload.jobId });
     console.log("deckpilot worker done", payload.jobId, payload.userId);
   } catch (error) {
-    await updateGenerationJob(payload.userId, payload.jobId, "failed", error instanceof Error ? error.message : "Generation failed.");
+    await updateGenerationJob(payload.userId, payload.jobId, "failed", toUserFacingError(error));
     throw error;
   }
 }
