@@ -62,6 +62,7 @@ export async function withUploadedPptxText(input: PresentationRequest, sourceFil
     `Extracted source slide count: ${extracted.slideCount}`,
     `Slides with extractable text: ${extracted.extractableSlideCount}`,
     `Extractable text characters: ${extracted.extractableCharCount}`,
+    extracted.brandColors.length ? `Detected source deck brand colors: ${extracted.brandColors.map((color) => `#${color}`).join(", ")}` : "",
     `Required source anchors to preserve exactly: ${sourceAnchors.join(", ") || "(none)"}`,
     "",
     "Source preservation contract:",

@@ -1,4 +1,4 @@
-ï»¿// @ts-expect-error The local CJS wrapper forces Netlify to use pptxgenjs' require export.
+// @ts-expect-error The local CJS wrapper forces Netlify to use pptxgenjs' require export.
 import PptxGenJSModule from "./pptxgenjs.cjs";
 import type PptxGenJS from "pptxgenjs";
 import type { DeckSlide, DeckSpec, DeckTemplate } from "../src/shared/deck";
@@ -72,9 +72,56 @@ const palettes = {
     sage: "647A56",
     line: "D2D0C6",
   },
+  creativePitch: {
+    bg: "FBF7FF",
+    panel: "FFFFFF",
+    panel2: "F0E6FF",
+    text: "171321",
+    muted: "665C78",
+    gold: "FF9F1C",
+    cyan: "00B8D9",
+    sage: "7ED957",
+    line: "D9C8F2",
+  },
+  corporateClean: {
+    bg: "F5F8FC",
+    panel: "FFFFFF",
+    panel2: "EAF0F8",
+    text: "162033",
+    muted: "647086",
+    gold: "D4932F",
+    cyan: "2563EB",
+    sage: "0F9F6E",
+    line: "D6DEE9",
+  },
+  brandGradient: {
+    bg: "101024",
+    panel: "1A1833",
+    panel2: "261E4D",
+    text: "FFF8F3",
+    muted: "C7BCD8",
+    gold: "FFB703",
+    cyan: "7C3AED",
+    sage: "06D6A0",
+    line: "3D345F",
+  },
+  internalOps: {
+    bg: "F6F7F2",
+    panel: "FFFFFF",
+    panel2: "E9EEE5",
+    text: "1F2A24",
+    muted: "68756D",
+    gold: "C58A2A",
+    cyan: "2E7C67",
+    sage: "7A9B55",
+    line: "D7DDD2",
+  },
 } satisfies Record<DeckTemplate, Record<"bg" | "panel" | "panel2" | "text" | "muted" | "gold" | "cyan" | "sage" | "line", string>>;
 
+type Palette = (typeof palettes)[DeckTemplate];
+
 let colors = palettes.executiveDark;
+let fontSet: { head: string; body: string } = { head: "Microsoft YaHei", body: "Microsoft YaHei" };
 
 const templateByStyle = {
   consulting: "executiveDark",
@@ -85,6 +132,13 @@ const templateByStyle = {
 
 type Accent = "gold" | "cyan" | "sage";
 
+const fontSystems = {
+  modernSans: { head: "Microsoft YaHei", body: "Microsoft YaHei" },
+  editorialSerif: { head: "Georgia", body: "Microsoft YaHei" },
+  condensedImpact: { head: "Arial Black", body: "Microsoft YaHei" },
+  roundedHuman: { head: "Trebuchet MS", body: "Microsoft YaHei" },
+} as const;
+
 export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   const pptx = new PptxGen();
   pptx.layout = "LAYOUT_WIDE";
@@ -92,15 +146,16 @@ export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
   pptx.company = "DeckEvo";
   pptx.subject = deck.subtitle;
   pptx.title = deck.title;
+  fontSet = fontSystems[deck.theme?.fontStyle || "modernSans"] || fontSystems.modernSans;
   pptx.theme = {
-    headFontFace: "Microsoft YaHei",
-    bodyFontFace: "Microsoft YaHei",
+    headFontFace: fontSet.head,
+    bodyFontFace: fontSet.body,
   };
   pptx.defineLayout({ name: "LAYOUT_WIDE", width: 13.333, height: 7.5 });
 
   const accent = (deck.theme?.accent || "gold") as Accent;
   const template = resolveTemplate(deck);
-  colors = palettes[template];
+  colors = withBrandColors(palettes[template], deck);
 
   deck.slides.forEach((slide, index) => {
     const page = pptx.addSlide();
@@ -111,6 +166,45 @@ export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
 
   const arrayBuffer = await pptx.write({ outputType: "arraybuffer" });
   return Buffer.from(arrayBuffer as ArrayBuffer);
+}
+
+function withBrandColors(base: Palette, deck: DeckSpec) {
+  const primary = cleanHex(deck.theme?.brandPrimary);
+  const secondary = cleanHex(deck.theme?.brandSecondary);
+  if (!primary && !secondary) return base;
+  return {
+    ...base,
+    gold: primary || base.gold,
+    cyan: secondary || primary || base.cyan,
+    sage: secondary || base.sage,
+    line: primary ? blendHex(primary, base.bg, 0.7) : base.line,
+  };
+}
+
+function cleanHex(value: string | undefined) {
+  const match = String(value || "").match(/^#?([0-9a-fA-F]{6})$/);
+  return match ? match[1].toUpperCase() : undefined;
+}
+
+function blendHex(foreground: string, background: string, amount: number) {
+  const fg = hexToRgb(foreground);
+  const bg = hexToRgb(background);
+  if (!fg || !bg) return foreground;
+  const mix = (a: number, b: number) => Math.round(a * (1 - amount) + b * amount);
+  return [mix(fg.r, bg.r), mix(fg.g, bg.g), mix(fg.b, bg.b)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+function hexToRgb(hex: string) {
+  const clean = cleanHex(hex);
+  if (!clean) return null;
+  return {
+    r: Number.parseInt(clean.slice(0, 2), 16),
+    g: Number.parseInt(clean.slice(2, 4), 16),
+    b: Number.parseInt(clean.slice(4, 6), 16),
+  };
 }
 
 function resolveTemplate(deck: DeckSpec): DeckTemplate {
@@ -150,6 +244,72 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, t
       w: 11.9,
       h: 0,
       line: { color: colors.line, transparency: 0, width: 0.8 },
+    });
+    return;
+  }
+
+  if (template === "corporateClean" || template === "internalOps") {
+    page.addShape("rect", {
+      x: 0,
+      y: 0,
+      w: 13.333,
+      h: 0.86,
+      fill: { color: colors.panel },
+      line: { color: colors.panel, transparency: 100 },
+    });
+    page.addShape("rect", {
+      x: 0,
+      y: 0.86,
+      w: 0.18,
+      h: 6.64,
+      fill: { color: colors[accent], transparency: template === "internalOps" ? 10 : 0 },
+      line: { color: colors[accent], transparency: 100 },
+    });
+    page.addShape("rect", {
+      x: 9.55,
+      y: 1.08,
+      w: 2.85,
+      h: 5.65,
+      fill: { color: colors.panel2, transparency: 18 },
+      line: { color: colors.line, transparency: 55 },
+    });
+    return;
+  }
+
+  if (template === "creativePitch" || template === "brandGradient") {
+    page.addShape("arc", {
+      x: -1.8,
+      y: -1.9,
+      w: 5.7,
+      h: 5.7,
+      fill: { color: colors[accent], transparency: template === "brandGradient" ? 18 : 28 },
+      line: { color: colors[accent], transparency: 100 },
+      rotate: 18,
+    });
+    page.addShape("arc", {
+      x: 9.0,
+      y: 4.15,
+      w: 4.8,
+      h: 4.8,
+      fill: { color: colors.cyan, transparency: template === "brandGradient" ? 22 : 40 },
+      line: { color: colors.cyan, transparency: 100 },
+      rotate: -22,
+    });
+    page.addShape("rect", {
+      x: 8.7,
+      y: 0.95,
+      w: 3.6,
+      h: 5.95,
+      fill: { color: colors.panel2, transparency: template === "brandGradient" ? 28 : 4 },
+      line: { color: colors.line, transparency: 42 },
+      rotate: 4,
+    });
+    page.addShape("line", {
+      x: 0.78,
+      y: 6.76,
+      w: 11.65,
+      h: 0,
+      line: { color: colors[accent], transparency: 18, width: 1.4 },
     });
     return;
   }
@@ -341,7 +501,7 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
     y: 0.48,
     w: 7.6,
     h: 0.24,
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 8,
     bold: true,
     color: colors[accent],
@@ -354,7 +514,7 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
     w: 1.5,
     h: 0.28,
     align: "right",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 8,
     color: colors.muted,
     margin: 0,
@@ -379,7 +539,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       w: 7.15,
       h: 1.72,
       fit: "shrink",
-      fontFace: "Microsoft YaHei",
+      fontFace: fontSet.head,
       fontSize: 39,
       bold: true,
       color: colors.text,
@@ -414,7 +574,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       w: 10.05,
       h: 1.42,
       fit: "shrink",
-      fontFace: "Microsoft YaHei",
+      fontFace: fontSet.head,
       fontSize: 34,
       bold: true,
       color: colors.text,
@@ -443,6 +603,85 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     return;
   }
 
+  if (template === "creativePitch" || template === "brandGradient") {
+    page.addText(slide.kicker || "Creative proposal", {
+      x: 0.78,
+      y: 0.98,
+      w: 3.8,
+      h: 0.28,
+      fontFace: fontSet.head,
+      fontSize: 9,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(slide.title, {
+      x: 0.76,
+      y: 1.38,
+      w: 8.4,
+      h: 2.18,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: 44,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    page.addText(slide.subtitle || "", {
+      x: 0.82,
+      y: 3.72,
+      w: 6.8,
+      h: 0.54,
+      fit: "shrink",
+      fontFace: fontSet.body,
+      fontSize: 14,
+      color: colors.muted,
+      margin: 0,
+    });
+    addBulletPanel(page, slide.body || [], 8.76, 2.02, 2.75, accent);
+    return;
+  }
+
+  if (template === "corporateClean" || template === "internalOps") {
+    page.addText(slide.kicker || "Internal report", {
+      x: 0.82,
+      y: 1.04,
+      w: 3.2,
+      h: 0.24,
+      fontFace: fontSet.head,
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+    });
+    page.addText(slide.title, {
+      x: 0.82,
+      y: 1.56,
+      w: 7.7,
+      h: 1.56,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: 34,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    page.addText(slide.subtitle || "", {
+      x: 0.86,
+      y: 3.34,
+      w: 6.7,
+      h: 0.42,
+      fit: "shrink",
+      fontFace: fontSet.body,
+      fontSize: 12,
+      color: colors.muted,
+      margin: 0,
+    });
+    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "Q", slide.metric?.context || slide.visual, accent);
+    addBulletPanel(page, slide.body || [], 0.86, 4.45, 6.3, accent);
+    return;
+  }
+
   if (template === "productNeon" || template === "dataGrid") {
     page.addShape("rect", {
       x: 0.78,
@@ -465,7 +704,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     w: titleW,
     h: 2.15,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: titleFont,
     bold: true,
     color: colors.text,
@@ -508,7 +747,7 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
       w: 10.4,
       h: 0.76,
       fit: "shrink",
-      fontFace: "Microsoft YaHei",
+      fontFace: fontSet.head,
       fontSize: template === "academicPaper" ? 24 : 27,
       bold: true,
       color: colors.text,
@@ -537,7 +776,7 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
     w: 7.9,
     h: 0.88,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 28,
     bold: true,
     color: colors.text,
@@ -572,7 +811,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
       w: 8.6,
       fontSize: template === "academicPaper" ? 24 : 27,
     });
-    const items = (slide.body || ["æ ¸å¿ƒåˆ¤æ–­", "å…³é”®è¯æ®", "å»ºè®®åŠ¨ä½œ", "é¢„æœŸå½±å“"]).slice(0, 4);
+    const items = (slide.body || ["ºËÐÄÅÐ¶Ï", "¹Ø¼üÖ¤¾Ý", "½¨Òé¶¯×÷", "Ô¤ÆÚÓ°Ïì"]).slice(0, 4);
     items.forEach((item, i) => {
       const y = 2.22 + i * 0.78;
       page.addText(String(i + 1).padStart(2, "0"), {
@@ -656,7 +895,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   }
 
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["å…³é”®åˆ¤æ–­", "æŽ¨èåŠ¨ä½œ", "é¢„æœŸå½±å“"]).slice(0, 4);
+  const items = (slide.body || ["¹Ø¼üÅÐ¶Ï", "ÍÆ¼ö¶¯×÷", "Ô¤ÆÚÓ°Ïì"]).slice(0, 4);
 
   items.forEach((item, i) => {
     const x = 0.82 + (i % 2) * 4.15;
@@ -702,7 +941,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
 
 function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body?.length ? slide.body : ["çŽ°çŠ¶åˆ¤æ–­", "å…³é”®è¯æ®", "è§£å†³è·¯å¾„", "æ‰§è¡ŒèŠ‚å¥"]).slice(0, 6);
+  const items = (slide.body?.length ? slide.body : ["ÏÖ×´ÅÐ¶Ï", "¹Ø¼üÖ¤¾Ý", "½â¾öÂ·¾¶", "Ö´ÐÐ½Ú×à"]).slice(0, 6);
 
   if (template === "editorialLight" || template === "academicPaper") {
     items.forEach((item, i) => {
@@ -841,7 +1080,7 @@ function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
       w: 8.8,
       h: 1.18,
       fit: "shrink",
-      fontFace: "Microsoft YaHei",
+      fontFace: fontSet.head,
       fontSize: 31,
       bold: true,
       color: colors.text,
@@ -884,7 +1123,7 @@ function renderSection(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
     w: 9.4,
     h: 1.35,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 34,
     bold: true,
     color: colors.text,
@@ -909,7 +1148,7 @@ function renderClosing(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
     w: 9.6,
     h: 0.95,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 30,
     bold: true,
     color: colors.text,
@@ -1036,7 +1275,7 @@ function renderChart(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
 
 function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["å¯åŠ¨", "éªŒè¯", "æ‰©å±•", "è§„æ¨¡åŒ–"]).slice(0, 5);
+  const items = (slide.body || ["Æô¶¯", "ÑéÖ¤", "À©Õ¹", "¹æÄ£»¯"]).slice(0, 5);
   const startX = 0.95;
   const stepW = 2.18;
 
@@ -1088,7 +1327,7 @@ function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent)
 
 function renderMatrix(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["é«˜ä»·å€¼ / ä½Žå¤æ‚", "é«˜ä»·å€¼ / é«˜å¤æ‚", "ä½Žä»·å€¼ / ä½Žå¤æ‚", "ä½Žä»·å€¼ / é«˜å¤æ‚"]).slice(0, 4);
+  const items = (slide.body || ["¸ß¼ÛÖµ / µÍ¸´ÔÓ", "¸ß¼ÛÖµ / ¸ß¸´ÔÓ", "µÍ¼ÛÖµ / µÍ¸´ÔÓ", "µÍ¼ÛÖµ / ¸ß¸´ÔÓ"]).slice(0, 4);
   const labels = ["High impact", "Strategic bet", "Quick win", "Defer"];
 
   items.forEach((item, i) => {
@@ -1146,7 +1385,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     w: 6.25,
     h: 1.15,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: template === "academicPaper" ? 25 : 31,
     bold: true,
     color: colors.text,
@@ -1189,7 +1428,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     w: 3.45,
     h: 0.9,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 39,
     bold: true,
     color: colors.text,
@@ -1226,7 +1465,7 @@ function renderSplitStory(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     h: 3.45,
     line: { color: colors[accent], transparency: 28, width: 1.1 },
   });
-  page.addText("â†’", {
+  page.addText("¡ú", {
     x: 6.15,
     y: 3.35,
     w: 0.6,
@@ -1353,7 +1592,7 @@ function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Acce
   });
   addBeforeAfterBlock(page, "Before", before, 1.18, 2.82, accent, false);
   addBeforeAfterBlock(page, "After", after, 7.36, 2.82, accent, true);
-  page.addText("â†’", {
+  page.addText("¡ú", {
     x: 5.78,
     y: 3.33,
     w: 0.7,
@@ -1601,7 +1840,7 @@ function renderQuote(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     w: 9.4,
     h: 1.68,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: template === "academicPaper" ? 25 : 31,
     bold: true,
     color: colors.text,
@@ -1760,7 +1999,7 @@ function compactText(value: string, maxLength: number) {
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
-  const rows = items.length ? items.slice(0, 5) : ["æ ¸å¿ƒè§‚ç‚¹", "æ”¯æ’‘è¯æ®", "ä¸‹ä¸€æ­¥è¡ŒåŠ¨"];
+  const rows = items.length ? items.slice(0, 5) : ["ºËÐÄ¹Ûµã", "Ö§³ÅÖ¤¾Ý", "ÏÂÒ»²½ÐÐ¶¯"];
   rows.forEach((item, i) => {
     const top = y + i * 0.58;
     const fontSize = denseTextFontSize(item, 15);
@@ -1861,7 +2100,7 @@ function titleOptions(): PptxGenJS.TextPropsOptions {
     w: 9.1,
     h: 0.95,
     fit: "shrink",
-    fontFace: "Microsoft YaHei",
+    fontFace: fontSet.head,
     fontSize: 26,
     bold: true,
     color: colors.text,

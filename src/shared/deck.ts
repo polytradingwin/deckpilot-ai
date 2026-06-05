@@ -1,7 +1,19 @@
 export type SourceType = "ppt" | "outline";
 export type Purpose = "fundraising" | "sales" | "training" | "report";
 export type VisualStyle = "consulting" | "product" | "brand" | "academic";
-export type DeckTemplate = "executiveDark" | "editorialLight" | "dataGrid" | "productNeon" | "warmBoardroom" | "academicPaper";
+export type DeckTemplate =
+  | "executiveDark"
+  | "editorialLight"
+  | "dataGrid"
+  | "productNeon"
+  | "warmBoardroom"
+  | "academicPaper"
+  | "creativePitch"
+  | "corporateClean"
+  | "brandGradient"
+  | "internalOps";
+export type FontStyle = "modernSans" | "editorialSerif" | "condensedImpact" | "roundedHuman";
+export type PaletteIntent = "brand" | "creative" | "corporate" | "tech" | "warm" | "academic";
 
 export type PresentationRequest = {
   source: SourceType;
@@ -24,6 +36,10 @@ export type DeckSpec = {
     mood: string;
     template?: DeckTemplate;
     density?: "calm" | "balanced" | "dense";
+    fontStyle?: FontStyle;
+    paletteIntent?: PaletteIntent;
+    brandPrimary?: string;
+    brandSecondary?: string;
   };
   slides: DeckSlide[];
 };

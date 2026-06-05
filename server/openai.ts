@@ -25,9 +25,24 @@ const deckSchema = {
         mood: { type: "string" },
         template: {
           type: "string",
-          enum: ["executiveDark", "editorialLight", "dataGrid", "productNeon", "warmBoardroom", "academicPaper"],
+          enum: [
+            "executiveDark",
+            "editorialLight",
+            "dataGrid",
+            "productNeon",
+            "warmBoardroom",
+            "academicPaper",
+            "creativePitch",
+            "corporateClean",
+            "brandGradient",
+            "internalOps",
+          ],
         },
         density: { type: "string", enum: ["calm", "balanced", "dense"] },
+        fontStyle: { type: "string", enum: ["modernSans", "editorialSerif", "condensedImpact", "roundedHuman"] },
+        paletteIntent: { type: "string", enum: ["brand", "creative", "corporate", "tech", "warm", "academic"] },
+        brandPrimary: { type: "string" },
+        brandSecondary: { type: "string" },
       },
     },
     slides: {
@@ -430,7 +445,11 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Add a short takeaway to most non-cover slides.",
     "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
-    "- Set theme.template to the best visual system for the material: executiveDark, editorialLight, dataGrid, productNeon, warmBoardroom, or academicPaper.",
+    "- Set theme.template to the best visual system for the material: executiveDark, editorialLight, dataGrid, productNeon, warmBoardroom, academicPaper, creativePitch, corporateClean, brandGradient, or internalOps.",
+    "- If the user's material mentions brand colors, VI, logo colors, primary colors, or includes obvious brand color words/hex codes, set theme.paletteIntent to brand and set theme.brandPrimary / theme.brandSecondary as hex colors.",
+    "- If this is an agency/vendor-to-client presentation, campaign proposal, brand launch, sales pitch, or creative concept, prefer creativePitch or brandGradient with expressive color and bigger visual rhythm.",
+    "- If this is company internal reporting, weekly/monthly review, department work summary, OKR, operation review, or management sync, prefer corporateClean, internalOps, or dataGrid with clear hierarchy and more varied but controlled colors.",
+    "- Choose theme.fontStyle deliberately: modernSans for SaaS/product/business; editorialSerif for premium/brand/story; condensedImpact for bold pitch/creative; roundedHuman for internal enablement/training.",
     `- Make the selected theme and layout rhythm clearly match this visual direction: ${visualDirection}.`,
     "- Vary the template, accent, density, and layout mix according to the user's content; avoid making unrelated decks look identical.",
     "- Speaker notes should explain the presenter talk track in 1 to 3 sentences.",
@@ -471,21 +490,27 @@ function pickVisualDirection(input: PresentationRequest) {
       "executiveDark: dark boardroom deck, cinematic cover, large claims, sparse evidence blocks, gold accent",
       "dataGrid: operating dashboard deck, visible grid system, KPI rows, dense but organized evidence",
       "warmBoardroom: premium investor memo, warm dark palette, serif-like rhythm, decision cards",
+      "corporateClean: internal leadership report, bright background, blue/teal system colors, clear KPI hierarchy",
+      "creativePitch: client-facing proposal, expressive blocks, bigger typography, richer color moments",
     ],
     product: [
       "productNeon: modular product UI deck, dark panels, cyan signal lines, system architecture feel",
       "dataGrid: technical operating dashboard, grid rails, compact labels, proof-led modules",
       "executiveDark: enterprise sales deck, restrained dark theme, strong product claims",
+      "brandGradient: modern product launch deck, color gradients, bold positioning, demo-like composition",
     ],
     brand: [
       "editorialLight: magazine-like brand story, wide whitespace, warm paper, expressive section pages",
       "warmBoardroom: premium launch narrative, cinematic contrast, bold statement pages",
       "productNeon: modern digital campaign deck, dark interactive product feel",
+      "creativePitch: agency proposal deck, expressive typography, colorful concept pages, client-facing polish",
+      "brandGradient: VI-led brand deck, primary color system, gradients, emotional section rhythm",
     ],
     academic: [
       "academicPaper: research paper deck, light background, thin rules, method/evidence/conclusion rhythm",
       "editorialLight: journal-style explainer, calm whitespace, annotated evidence blocks",
       "dataGrid: evidence dashboard, matrix pages, numbered findings, compact references",
+      "corporateClean: internal research readout, clean blue/gray palette, accessible summary hierarchy",
     ],
   };
 
@@ -770,6 +795,7 @@ function compactPromptText(value: string, maxLength: number) {
 }
 
 function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: PresentationRequest): DeckSpec["theme"] {
+  const detectedBrandColors = detectBrandColors(input.prompt);
   const accent = theme?.accent || (input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold");
   const template = theme?.template || defaultTemplate(input);
   const density = theme?.density || (input.slides >= 16 ? "dense" : input.slides <= 6 ? "calm" : "balanced");
@@ -778,15 +804,46 @@ function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: Presentatio
     mood: theme?.mood || input.style,
     template,
     density,
+    fontStyle: theme?.fontStyle || defaultFontStyle(template),
+    paletteIntent: theme?.paletteIntent || (detectedBrandColors[0] ? "brand" : defaultPaletteIntent(template)),
+    brandPrimary: normalizeHexColor(theme?.brandPrimary) || detectedBrandColors[0],
+    brandSecondary: normalizeHexColor(theme?.brandSecondary) || detectedBrandColors[1],
   };
 }
 
-function defaultTemplate(input: PresentationRequest): DeckSpec["theme"]["template"] {
+function detectBrandColors(text: string) {
+  const colors = Array.from(new Set((text.match(/#[0-9a-fA-F]{6}\b/g) || []).map(normalizeHexColor).filter(Boolean))) as string[];
+  return colors.slice(0, 2);
+}
+
+function normalizeHexColor(value: string | undefined) {
+  const match = String(value || "").match(/^#?([0-9a-fA-F]{6})$/);
+  return match ? match[1].toUpperCase() : undefined;
+}
+
+function defaultFontStyle(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "creativePitch" || template === "brandGradient") return "condensedImpact";
+  if (template === "editorialLight" || template === "academicPaper" || template === "warmBoardroom") return "editorialSerif";
+  if (template === "internalOps" || template === "corporateClean") return "roundedHuman";
+  return "modernSans";
+}
+
+function defaultPaletteIntent(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "creativePitch" || template === "brandGradient") return "creative";
+  if (template === "corporateClean" || template === "internalOps") return "corporate";
+  if (template === "productNeon" || template === "dataGrid") return "tech";
+  if (template === "academicPaper") return "academic";
+  return "warm";
+}
+
+function defaultTemplate(input: PresentationRequest): NonNullable<DeckSpec["theme"]["template"]> {
   const options: Record<PresentationRequest["style"], NonNullable<DeckSpec["theme"]["template"]>[]> = {
-    consulting: input.purpose === "fundraising" ? ["warmBoardroom", "executiveDark", "dataGrid"] : ["executiveDark", "dataGrid", "warmBoardroom"],
-    product: input.purpose === "report" ? ["dataGrid", "productNeon", "executiveDark"] : ["productNeon", "dataGrid", "executiveDark"],
-    brand: ["editorialLight", "warmBoardroom", "productNeon"],
-    academic: ["academicPaper", "editorialLight", "dataGrid"],
+    consulting: input.purpose === "fundraising"
+      ? ["warmBoardroom", "executiveDark", "corporateClean", "creativePitch"]
+      : ["corporateClean", "internalOps", "dataGrid", "executiveDark", "creativePitch"],
+    product: input.purpose === "report" ? ["dataGrid", "corporateClean", "internalOps", "productNeon"] : ["productNeon", "brandGradient", "dataGrid", "executiveDark"],
+    brand: ["creativePitch", "brandGradient", "editorialLight", "warmBoardroom", "productNeon"],
+    academic: ["academicPaper", "editorialLight", "corporateClean", "dataGrid"],
   };
   const pool = options[input.style] || options.consulting;
   return pool[Math.floor(Math.random() * pool.length)] || "executiveDark";

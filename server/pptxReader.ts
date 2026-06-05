@@ -26,6 +26,7 @@ export async function extractTextFromPptx(buffer: Buffer) {
   }
 
   const slides: ExtractedSlide[] = [];
+  const brandColors = await extractBrandColors(zip, slideFiles);
 
   for (const fileName of slideFiles) {
     const xml = await zip.files[fileName]?.async("text");
@@ -61,9 +62,57 @@ export async function extractTextFromPptx(buffer: Buffer) {
     slideCount: slideFiles.length,
     extractableSlideCount: extractableSlides.length,
     extractableCharCount,
+    brandColors,
     slides,
     text: combined.slice(0, 28000),
   };
+}
+
+async function extractBrandColors(zip: JSZip, slideFiles: string[]) {
+  const candidates = [
+    "ppt/theme/theme1.xml",
+    ...slideFiles.slice(0, 12),
+  ];
+  const counts = new Map<string, number>();
+
+  for (const fileName of candidates) {
+    const xml = await zip.files[fileName]?.async("text");
+    if (!xml) continue;
+    for (const color of collectHexColors(xml)) {
+      counts.set(color, (counts.get(color) || 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([color]) => color)
+    .slice(0, 2);
+}
+
+function collectHexColors(xml: string) {
+  const values = new Set<string>();
+  for (const match of xml.matchAll(/\b(?:srgbClr\s+val|solidFill[^>]*color|fgClr[^>]*rgb)="?([0-9a-fA-F]{6})"?/g)) {
+    const color = normalizeBrandColor(match[1]);
+    if (color) values.add(color);
+  }
+  for (const match of xml.matchAll(/\b(?:val|color)="([0-9a-fA-F]{6})"/g)) {
+    const color = normalizeBrandColor(match[1]);
+    if (color) values.add(color);
+  }
+  return Array.from(values);
+}
+
+function normalizeBrandColor(value: string) {
+  const color = value.toUpperCase();
+  const rgb = {
+    r: Number.parseInt(color.slice(0, 2), 16),
+    g: Number.parseInt(color.slice(2, 4), 16),
+    b: Number.parseInt(color.slice(4, 6), 16),
+  };
+  const max = Math.max(rgb.r, rgb.g, rgb.b);
+  const min = Math.min(rgb.r, rgb.g, rgb.b);
+  if (max < 45 || min > 235 || max - min < 24) return null;
+  return color;
 }
 
 function getSlideNumber(fileName: string) {

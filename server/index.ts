@@ -338,6 +338,7 @@ async function validateRequest(
     prompt = [
       `Uploaded PowerPoint: ${file.originalname}`,
       `Extracted source slide count: ${extracted.slideCount}`,
+      extracted.brandColors.length ? `Detected source deck brand colors: ${extracted.brandColors.map((color) => `#${color}`).join(", ")}` : "",
       "Extracted slide text:",
       extracted.text,
       prompt ? ["Additional user direction:", prompt].join("\n") : "",
