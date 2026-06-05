@@ -117,7 +117,11 @@ function resolveTemplate(deck: DeckSpec): DeckTemplate {
   const requested = deck.theme?.template;
   if (requested && requested in palettes) return requested;
   const fromMood = templateByStyle[(deck.theme?.mood || "") as keyof typeof templateByStyle];
-  return fromMood || "executiveDark";
+  if (fromMood) return fromMood;
+  const templates = Object.keys(palettes) as DeckTemplate[];
+  const seed = `${deck.title || ""}${deck.subtitle || ""}${Date.now()}`;
+  const index = Array.from(seed).reduce((sum, char) => sum + char.charCodeAt(0), 0) % templates.length;
+  return templates[index] || "executiveDark";
 }
 
 function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, template: DeckTemplate) {
@@ -244,7 +248,7 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
   }
 
   if (slide.layout === "agenda") {
-    renderAgenda(page, slide, accent);
+    renderAgenda(page, slide, accent, template);
     return;
   }
 
@@ -254,7 +258,7 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
   }
 
   if (slide.layout === "executiveSummary") {
-    renderExecutiveSummary(page, slide, accent);
+    renderExecutiveSummary(page, slide, accent, template);
     return;
   }
 
@@ -559,7 +563,98 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
   addTakeaway(page, slide.takeaway, accent);
 }
 
-function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  if (template === "editorialLight" || template === "academicPaper") {
+    page.addText(slide.title, {
+      ...titleOptions(),
+      x: 0.86,
+      y: 1.02,
+      w: 8.6,
+      fontSize: template === "academicPaper" ? 24 : 27,
+    });
+    const items = (slide.body || ["核心判断", "关键证据", "建议动作", "预期影响"]).slice(0, 4);
+    items.forEach((item, i) => {
+      const y = 2.22 + i * 0.78;
+      page.addText(String(i + 1).padStart(2, "0"), {
+        x: 0.92,
+        y,
+        w: 0.5,
+        h: 0.24,
+        fontSize: 11,
+        bold: true,
+        color: colors[accent],
+        margin: 0,
+      });
+      page.addShape("line", {
+        x: 1.55,
+        y: y + 0.13,
+        w: 7.4,
+        h: 0,
+        line: { color: colors.line, transparency: 0, width: 0.7 },
+      });
+      page.addText(item, {
+        x: 1.66,
+        y: y - 0.02,
+        w: 7.0,
+        h: 0.34,
+        fit: "shrink",
+        fontSize: 13,
+        bold: true,
+        color: colors.text,
+        margin: 0,
+      });
+    });
+    addMetricCard(page, slide.metric?.label || "Decision", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
+    addTakeaway(page, slide.takeaway, accent);
+    return;
+  }
+
+  if (template === "dataGrid" || template === "productNeon") {
+    page.addText(slide.title, titleOptions());
+    const items = (slide.body || ["Signal", "Constraint", "Move", "Owner"]).slice(0, 4);
+    items.forEach((item, i) => {
+      const x = 0.82 + i * 2.95;
+      page.addShape("rect", {
+        x,
+        y: 2.08,
+        w: 2.48,
+        h: 2.95,
+        fill: { color: colors.panel2, transparency: template === "productNeon" ? 8 : 2 },
+        line: { color: i === 0 ? colors[accent] : colors.line, transparency: i === 0 ? 4 : 18 },
+      });
+      page.addShape("line", {
+        x: x + 0.28,
+        y: 2.5,
+        w: 1.78,
+        h: 0,
+        line: { color: colors[accent], transparency: i === 0 ? 0 : 36, width: 1.4 },
+      });
+      page.addText(String(i + 1).padStart(2, "0"), {
+        x: x + 0.28,
+        y: 2.78,
+        w: 0.5,
+        h: 0.24,
+        fontSize: 11,
+        bold: true,
+        color: colors[accent],
+        margin: 0,
+      });
+      page.addText(item, {
+        x: x + 0.28,
+        y: 3.38,
+        w: 1.88,
+        h: 0.82,
+        fit: "shrink",
+        fontSize: 13,
+        bold: true,
+        color: colors.text,
+        margin: 0,
+      });
+    });
+    addTakeaway(page, slide.takeaway, accent);
+    return;
+  }
+
   page.addText(slide.title, titleOptions());
   const items = (slide.body || ["关键判断", "推荐动作", "预期影响"]).slice(0, 4);
 
@@ -605,9 +700,85 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   addTakeaway(page, slide.takeaway, accent);
 }
 
-function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
+function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
   page.addText(slide.title, titleOptions());
   const items = (slide.body?.length ? slide.body : ["现状判断", "关键证据", "解决路径", "执行节奏"]).slice(0, 6);
+
+  if (template === "editorialLight" || template === "academicPaper") {
+    items.forEach((item, i) => {
+      const x = 0.92 + (i % 2) * 5.35;
+      const y = 2.05 + Math.floor(i / 2) * 0.98;
+      page.addText(String(i + 1).padStart(2, "0"), {
+        x,
+        y,
+        w: 0.58,
+        h: 0.24,
+        fontSize: 10,
+        bold: true,
+        color: colors[accent],
+        margin: 0,
+      });
+      page.addText(item, {
+        x: x + 0.76,
+        y: y - 0.04,
+        w: 4.0,
+        h: 0.34,
+        fit: "shrink",
+        fontSize: 13,
+        bold: true,
+        color: colors.text,
+        margin: 0,
+      });
+      page.addShape("line", {
+        x,
+        y: y + 0.48,
+        w: 4.55,
+        h: 0,
+        line: { color: colors.line, transparency: 8, width: 0.7 },
+      });
+    });
+    addTakeaway(page, slide.takeaway || "A clear narrative map keeps the audience oriented before the evidence deep-dive.", accent);
+    return;
+  }
+
+  if (template === "dataGrid" || template === "productNeon") {
+    items.forEach((item, i) => {
+      const x = 0.84 + (i % 3) * 3.78;
+      const y = 2.08 + Math.floor(i / 3) * 1.34;
+      page.addShape("rect", {
+        x,
+        y,
+        w: 3.1,
+        h: 0.92,
+        fill: { color: colors.panel2, transparency: i === 0 ? 0 : 8 },
+        line: { color: i === 0 ? colors[accent] : colors.line, transparency: i === 0 ? 4 : 20 },
+      });
+      page.addText(`M${String(i + 1).padStart(2, "0")}`, {
+        x: x + 0.24,
+        y: y + 0.22,
+        w: 0.62,
+        h: 0.18,
+        fontSize: 7.5,
+        bold: true,
+        color: colors[accent],
+        margin: 0,
+      });
+      page.addText(item, {
+        x: x + 0.92,
+        y: y + 0.18,
+        w: 1.9,
+        h: 0.34,
+        fit: "shrink",
+        fontSize: 11.5,
+        bold: true,
+        color: colors.text,
+        margin: 0,
+      });
+    });
+    addTakeaway(page, slide.takeaway || "A clear narrative map keeps the audience oriented before the evidence deep-dive.", accent);
+    return;
+  }
+
   items.forEach((item, i) => {
     const y = 2.15 + i * 0.62;
     page.addShape("rect", {

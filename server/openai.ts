@@ -396,6 +396,7 @@ function stripJsonFence(text: string) {
 
 function buildUserPrompt(input: PresentationRequest, previousError?: string) {
   const requestedSlides = clampSlideCount(input.slides);
+  const visualDirection = pickVisualDirection(input);
 
   return [
     previousError ? `Previous generation failed validation: ${previousError}` : "",
@@ -408,6 +409,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
+    `Visual direction for this generation: ${visualDirection}`,
     ...requiredAnchorPrompt(input),
     "User material:",
     input.prompt || "(No text provided.)",
@@ -429,6 +431,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
     "- Set theme.template to the best visual system for the material: executiveDark, editorialLight, dataGrid, productNeon, warmBoardroom, or academicPaper.",
+    `- Make the selected theme and layout rhythm clearly match this visual direction: ${visualDirection}.`,
     "- Vary the template, accent, density, and layout mix according to the user's content; avoid making unrelated decks look identical.",
     "- Speaker notes should explain the presenter talk track in 1 to 3 sentences.",
     "- The deck must be directly renderable into PowerPoint.",
@@ -460,6 +463,34 @@ function structureRequirements(input: PresentationRequest) {
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
     "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison/beforeAfter for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix/insightGrid for priorities or risk mapping, threeCards for pillars, quote for decisive recommendations.",
   ];
+}
+
+function pickVisualDirection(input: PresentationRequest) {
+  const directions: Record<PresentationRequest["style"], string[]> = {
+    consulting: [
+      "executiveDark: dark boardroom deck, cinematic cover, large claims, sparse evidence blocks, gold accent",
+      "dataGrid: operating dashboard deck, visible grid system, KPI rows, dense but organized evidence",
+      "warmBoardroom: premium investor memo, warm dark palette, serif-like rhythm, decision cards",
+    ],
+    product: [
+      "productNeon: modular product UI deck, dark panels, cyan signal lines, system architecture feel",
+      "dataGrid: technical operating dashboard, grid rails, compact labels, proof-led modules",
+      "executiveDark: enterprise sales deck, restrained dark theme, strong product claims",
+    ],
+    brand: [
+      "editorialLight: magazine-like brand story, wide whitespace, warm paper, expressive section pages",
+      "warmBoardroom: premium launch narrative, cinematic contrast, bold statement pages",
+      "productNeon: modern digital campaign deck, dark interactive product feel",
+    ],
+    academic: [
+      "academicPaper: research paper deck, light background, thin rules, method/evidence/conclusion rhythm",
+      "editorialLight: journal-style explainer, calm whitespace, annotated evidence blocks",
+      "dataGrid: evidence dashboard, matrix pages, numbered findings, compact references",
+    ],
+  };
+
+  const pool = directions[input.style] || directions.consulting;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function sourceSpecificRequirements(input: PresentationRequest) {
@@ -751,11 +782,14 @@ function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: Presentatio
 }
 
 function defaultTemplate(input: PresentationRequest): DeckSpec["theme"]["template"] {
-  if (input.style === "product") return input.purpose === "report" ? "dataGrid" : "productNeon";
-  if (input.style === "brand") return "editorialLight";
-  if (input.style === "academic") return "academicPaper";
-  if (input.purpose === "fundraising") return "warmBoardroom";
-  return "executiveDark";
+  const options: Record<PresentationRequest["style"], NonNullable<DeckSpec["theme"]["template"]>[]> = {
+    consulting: input.purpose === "fundraising" ? ["warmBoardroom", "executiveDark", "dataGrid"] : ["executiveDark", "dataGrid", "warmBoardroom"],
+    product: input.purpose === "report" ? ["dataGrid", "productNeon", "executiveDark"] : ["productNeon", "dataGrid", "executiveDark"],
+    brand: ["editorialLight", "warmBoardroom", "productNeon"],
+    academic: ["academicPaper", "editorialLight", "dataGrid"],
+  };
+  const pool = options[input.style] || options.consulting;
+  return pool[Math.floor(Math.random() * pool.length)] || "executiveDark";
 }
 
 function fallbackLayout(index: number, total: number): DeckSpec["slides"][number]["layout"] {
