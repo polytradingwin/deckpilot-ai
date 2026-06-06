@@ -11,8 +11,9 @@ export async function savePptxFile(storedFilename: string, file: Buffer) {
     return;
   }
 
-  await fs.mkdir(storeDir, { recursive: true });
-  await fs.writeFile(path.join(storeDir, storedFilename), file);
+  const target = path.join(storeDir, storedFilename);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, file);
 }
 
 export async function readPptxFile(storedFilename: string) {

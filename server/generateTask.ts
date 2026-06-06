@@ -1,6 +1,9 @@
 import type { PresentationRequest } from "../src/shared/deck";
+import { randomUUID } from "node:crypto";
 import { consumeCredits, getCreditCost, getUserById } from "./auth";
 import { processPptxWithCanva } from "./canva";
+import { savePptxFile } from "./fileStorage";
+import { renderHighQualityDeckToPptx } from "./highQualityPptx";
 import { createDeckWithAI } from "./openai";
 import { renderDeckToPptx } from "./pptx";
 import { extractTextFromPptx, type SourceImageAsset } from "./pptxReader";
@@ -11,11 +14,14 @@ export type GenerationAssets = {
 };
 
 export async function generateAndSaveDeck(userId: string, input: PresentationRequest, options: { id?: string; assets?: GenerationAssets } = {}) {
+  const generationId = options.id || randomUUID();
   const creditCost = getCreditCost(input.slides);
   const { deck, file: draftFile } = await createRenderedDeckWithValidation(input, options.assets);
   const filename = safeFilename(deck.title || "deckevo-presentation");
-  const file = await processPptxWithCanva(draftFile, `${filename}.pptx`);
-  const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: options.id });
+  await savePptxFile(`drafts/${generationId}.pptx`, draftFile);
+  const highQualityFile = await renderHighQualityDeckToPptx(deck, options.assets);
+  const file = shouldFinalizeHighQualityWithCanva() ? await processPptxWithCanva(highQualityFile, `${filename}.pptx`) : highQualityFile;
+  const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: generationId });
   await consumeCredits(userId, creditCost);
   const updatedUser = await getUserById(userId);
 
@@ -27,6 +33,10 @@ export async function generateAndSaveDeck(userId: string, input: PresentationReq
     record,
     updatedUser,
   };
+}
+
+function shouldFinalizeHighQualityWithCanva() {
+  return process.env.HIGH_QUALITY_CANVA_FINALIZE === "1";
 }
 
 async function createRenderedDeckWithValidation(input: PresentationRequest, assets?: GenerationAssets) {
