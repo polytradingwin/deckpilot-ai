@@ -3,12 +3,16 @@ import { consumeCredits, getCreditCost, getUserById } from "./auth";
 import { processPptxWithCanva } from "./canva";
 import { createDeckWithAI } from "./openai";
 import { renderDeckToPptx } from "./pptx";
-import { extractTextFromPptx } from "./pptxReader";
+import { extractTextFromPptx, type SourceImageAsset } from "./pptxReader";
 import { saveGeneration } from "./store";
 
-export async function generateAndSaveDeck(userId: string, input: PresentationRequest, options: { id?: string } = {}) {
+export type GenerationAssets = {
+  sourceImages?: SourceImageAsset[];
+};
+
+export async function generateAndSaveDeck(userId: string, input: PresentationRequest, options: { id?: string; assets?: GenerationAssets } = {}) {
   const creditCost = getCreditCost(input.slides);
-  const { deck, file: draftFile } = await createRenderedDeckWithValidation(input);
+  const { deck, file: draftFile } = await createRenderedDeckWithValidation(input, options.assets);
   const filename = safeFilename(deck.title || "deckevo-presentation");
   const file = await processPptxWithCanva(draftFile, `${filename}.pptx`);
   const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: options.id });
@@ -25,14 +29,14 @@ export async function generateAndSaveDeck(userId: string, input: PresentationReq
   };
 }
 
-async function createRenderedDeckWithValidation(input: PresentationRequest) {
+async function createRenderedDeckWithValidation(input: PresentationRequest, assets?: GenerationAssets) {
   let nextInput = input;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const deck = await createDeckWithAI(nextInput);
-      const file = await renderDeckToPptx(deck);
+      const file = await renderDeckToPptx(deck, assets);
       await validateRenderedSourceAnchors(file, input);
       return { deck, file };
     } catch (error) {

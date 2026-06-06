@@ -72,6 +72,7 @@ export type DeckSlide = {
   takeaway?: string;
   speakerNotes?: string;
   visual?: string;
+  sourceSlides?: number[];
   metric?: {
     label: string;
     value: string;

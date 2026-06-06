@@ -89,6 +89,11 @@ const deckSchema = {
           takeaway: { type: "string" },
           speakerNotes: { type: "string" },
           visual: { type: "string" },
+          sourceSlides: {
+            type: "array",
+            maxItems: 4,
+            items: { type: "number" },
+          },
           metric: {
             type: "object",
             additionalProperties: false,
@@ -307,6 +312,7 @@ function buildSystemPrompt() {
       "Return only valid JSON that matches the supplied schema.",
       "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
       "Choose a visual template that fits the user's material instead of reusing the same look for every deck.",
+      "Do not behave like a fixed-template deck generator. Art-direct each slide from the user's content and choose a layout rhythm that fits the page purpose.",
       "Quality bar: every slide must have one dominant message, a reason to exist, and a visual structure that makes the message easier to understand.",
     ].join("\n");
   }
@@ -317,6 +323,7 @@ function buildSystemPrompt() {
     "Every slide title must be a message sentence, not a topic label.",
     "A strong deck should feel like a finished consultant/business presentation, not a generic AI outline.",
     "Select a distinct visual template based on the content, audience, and style request. Do not default to the same template every time.",
+    "Do not force a standard cover-agenda-summary pattern when redesigning an uploaded deck. Preserve the source deck's intent and art-direct every slide independently.",
     "Use a narrative spine: situation, complication, insight, recommendation, proof, rollout, risks, decision.",
     "Apply design taste: restrained typography, high contrast, strong spacing, compact labels, no text dumping, no decorative clutter.",
     "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
@@ -436,6 +443,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
     "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy or beforeAfter for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, splitStory for two-sided reasoning, threeCards for 3 pillars, insightGrid for 4 related insights.",
     "- Content-to-layout rules: numbers/KPIs -> heroMetric/dashboard/chart; steps/process/time -> process/timeline; pros/cons or old/new -> comparison/beforeAfter/splitStory; 3 capabilities/pillars -> threeCards; 4 findings/risks/priorities -> insightGrid/matrix; strong recommendation -> quote/closing.",
+    "- Treat the template as a loose visual direction, not a rigid template. Vary composition, density, scale, image use, and rhythm slide by slide.",
     "- Dashboard cards must be short metric summaries, not pasted raw paragraphs. Keep each dashboard card value under 18 Chinese characters or 8 English words.",
     "- Never put long source sentences into metric.value. Use metric.value only for a number, short status, or compact phrase; move detail into body, takeaway, or speaker notes.",
     "- Avoid using content layout repeatedly. A premium deck should alternate large-message pages, dense evidence pages, and structured explanation pages.",
@@ -524,6 +532,8 @@ function sourceSpecificRequirements(input: PresentationRequest) {
   return [
     "- This is a PPT redesign task, not a new-topic generation task.",
     "- The uploaded PPT content is the source of truth. Every output slide must be traceable to one or more source slides.",
+    "- For every output slide, set sourceSlides to the original slide number(s) used to create that slide.",
+    "- If the source deck includes images, logos, screenshots, diagrams, or product visuals, assume they will be reused as source assets. Write visual directions that leave room for those assets.",
     "- Keep the same domain, project names, product names, data points, decisions, risks, and timeline from the uploaded PPT.",
     "- If the user asks for a different style, change narrative quality and visual structure, not the underlying content.",
     "- Do not invent a new company, new product, new market, new fundraising story, or unrelated AI/SaaS scenario unless it exists in the uploaded source material.",
@@ -745,6 +755,7 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     ...slide,
     layout: improveLayoutForContent(slide, index, targetCount, input),
     body: trimSlideBody(slide.body),
+    sourceSlides: normalizeSourceSlides(slide.sourceSlides, index, input),
   }));
 
   return {
@@ -755,6 +766,14 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     theme: normalizeTheme(deck.theme, input),
     slides: enhancedSlides,
   };
+}
+
+function normalizeSourceSlides(sourceSlides: number[] | undefined, index: number, input: PresentationRequest) {
+  if (input.source !== "ppt") return sourceSlides;
+  const values = (sourceSlides || [index + 1])
+    .map((value) => Math.round(Number(value)))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return Array.from(new Set(values)).slice(0, 4);
 }
 
 function improveLayoutForContent(

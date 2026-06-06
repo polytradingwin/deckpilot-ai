@@ -2,6 +2,7 @@
 import PptxGenJSModule from "./pptxgenjs.cjs";
 import type PptxGenJS from "pptxgenjs";
 import type { DeckSlide, DeckSpec, DeckTemplate } from "../src/shared/deck";
+import type { SourceImageAsset } from "./pptxReader";
 
 const PptxGen = ((PptxGenJSModule as unknown as { default?: typeof PptxGenJS }).default || PptxGenJSModule) as typeof PptxGenJS;
 
@@ -131,6 +132,9 @@ const templateByStyle = {
 } as const satisfies Record<string, DeckTemplate>;
 
 type Accent = "gold" | "cyan" | "sage";
+export type RenderAssets = {
+  sourceImages?: SourceImageAsset[];
+};
 
 const fontSystems = {
   modernSans: { head: "Microsoft YaHei", body: "Microsoft YaHei" },
@@ -139,7 +143,7 @@ const fontSystems = {
   roundedHuman: { head: "Trebuchet MS", body: "Microsoft YaHei" },
 } as const;
 
-export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
+export async function renderDeckToPptx(deck: DeckSpec, assets: RenderAssets = {}): Promise<Buffer> {
   const pptx = new PptxGen();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "DeckEvo";
@@ -161,11 +165,80 @@ export async function renderDeckToPptx(deck: DeckSpec): Promise<Buffer> {
     const page = pptx.addSlide();
     paintBackground(page, accent, index, template);
     renderSlide(page, slide, index, deck.slides.length, accent, template);
+    addSourceImage(page, slide, index, assets, template, accent);
     if (slide.speakerNotes) page.addNotes(slide.speakerNotes);
   });
 
   const arrayBuffer = await pptx.write({ outputType: "arraybuffer" });
   return Buffer.from(arrayBuffer as ArrayBuffer);
+}
+
+function addSourceImage(
+  page: PptxGenJS.Slide,
+  slide: DeckSlide,
+  index: number,
+  assets: RenderAssets,
+  template: DeckTemplate,
+  accent: Accent,
+) {
+  const image = pickSourceImage(slide, index, assets.sourceImages);
+  if (!image) return;
+  const box = sourceImageBox(slide.layout, template, Boolean(slide.metric));
+  if (!box) return;
+
+  page.addShape("rect", {
+    x: box.x - 0.05,
+    y: box.y - 0.05,
+    w: box.w + 0.1,
+    h: box.h + 0.1,
+    fill: { color: colors.panel2, transparency: box.compact ? 16 : 4 },
+    line: { color: colors.line, transparency: box.compact ? 28 : 12, width: 0.8 },
+  });
+  page.addImage({
+    data: image.dataUri,
+    x: box.x,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+    sizing: { type: "contain", x: box.x, y: box.y, w: box.w, h: box.h },
+    altText: `Source image from uploaded slide ${image.slideNumber}`,
+  });
+  if (!box.compact) {
+    page.addShape("line", {
+      x: box.x,
+      y: box.y + box.h + 0.12,
+      w: Math.min(box.w, 2.9),
+      h: 0,
+      line: { color: colors[accent], transparency: 8, width: 1.2 },
+    });
+  }
+}
+
+function pickSourceImage(slide: DeckSlide, index: number, sourceImages: SourceImageAsset[] | undefined) {
+  if (!sourceImages?.length) return null;
+  const sourceSlides = slide.sourceSlides?.length ? slide.sourceSlides : [index + 1];
+  for (const sourceSlide of sourceSlides) {
+    const match = sourceImages.find((image) => image.slideNumber === sourceSlide);
+    if (match) return match;
+  }
+  return sourceImages[index % sourceImages.length] || null;
+}
+
+function sourceImageBox(layout: DeckSlide["layout"], template: DeckTemplate, hasMetric: boolean) {
+  if (layout === "closing") return null;
+  if (layout === "cover") {
+    return { x: 8.65, y: 1.42, w: 3.55, h: 3.35, compact: false };
+  }
+  if (layout === "section") {
+    return { x: 8.85, y: 2.05, w: 3.0, h: 2.35, compact: false };
+  }
+  if (["dashboard", "timeline", "matrix", "process", "threeCards", "beforeAfter", "insightGrid", "chart", "agenda", "executiveSummary"].includes(layout)) {
+    return { x: 10.45, y: 0.95, w: 2.05, h: 1.22, compact: true };
+  }
+  if (hasMetric || template === "corporateClean" || template === "internalOps") {
+    return { x: 8.86, y: 4.76, w: 2.95, h: 1.25, compact: true };
+  }
+  return { x: 8.72, y: 1.45, w: 3.35, h: 3.25, compact: false };
 }
 
 function withBrandColors(base: Palette, deck: DeckSpec) {
@@ -811,7 +884,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
       w: 8.6,
       fontSize: template === "academicPaper" ? 24 : 27,
     });
-    const items = (slide.body || ["ºËÐÄÅÐ¶Ï", "¹Ø¼üÖ¤¾Ý", "½¨Òé¶¯×÷", "Ô¤ÆÚÓ°Ïì"]).slice(0, 4);
+    const items = (slide.body || ["æ ¸å¿ƒåˆ¤æ–­", "å…³é”®è¯æ®", "å»ºè®®åŠ¨ä½œ", "é¢„æœŸå½±å“"]).slice(0, 4);
     items.forEach((item, i) => {
       const y = 2.22 + i * 0.78;
       page.addText(String(i + 1).padStart(2, "0"), {
@@ -895,7 +968,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   }
 
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["¹Ø¼üÅÐ¶Ï", "ÍÆ¼ö¶¯×÷", "Ô¤ÆÚÓ°Ïì"]).slice(0, 4);
+  const items = (slide.body || ["å…³é”®åˆ¤æ–­", "æŽ¨èåŠ¨ä½œ", "é¢„æœŸå½±å“"]).slice(0, 4);
 
   items.forEach((item, i) => {
     const x = 0.82 + (i % 2) * 4.15;
@@ -941,7 +1014,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
 
 function renderAgenda(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body?.length ? slide.body : ["ÏÖ×´ÅÐ¶Ï", "¹Ø¼üÖ¤¾Ý", "½â¾öÂ·¾¶", "Ö´ÐÐ½Ú×à"]).slice(0, 6);
+  const items = (slide.body?.length ? slide.body : ["çŽ°çŠ¶åˆ¤æ–­", "å…³é”®è¯æ®", "è§£å†³è·¯å¾„", "æ‰§è¡ŒèŠ‚å¥"]).slice(0, 6);
 
   if (template === "editorialLight" || template === "academicPaper") {
     items.forEach((item, i) => {
@@ -1275,7 +1348,7 @@ function renderChart(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
 
 function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["Æô¶¯", "ÑéÖ¤", "À©Õ¹", "¹æÄ£»¯"]).slice(0, 5);
+  const items = (slide.body || ["å¯åŠ¨", "éªŒè¯", "æ‰©å±•", "è§„æ¨¡åŒ–"]).slice(0, 5);
   const startX = 0.95;
   const stepW = 2.18;
 
@@ -1327,7 +1400,7 @@ function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent)
 
 function renderMatrix(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["¸ß¼ÛÖµ / µÍ¸´ÔÓ", "¸ß¼ÛÖµ / ¸ß¸´ÔÓ", "µÍ¼ÛÖµ / µÍ¸´ÔÓ", "µÍ¼ÛÖµ / ¸ß¸´ÔÓ"]).slice(0, 4);
+  const items = (slide.body || ["é«˜ä»·å€¼ / ä½Žå¤æ‚", "é«˜ä»·å€¼ / é«˜å¤æ‚", "ä½Žä»·å€¼ / ä½Žå¤æ‚", "ä½Žä»·å€¼ / é«˜å¤æ‚"]).slice(0, 4);
   const labels = ["High impact", "Strategic bet", "Quick win", "Defer"];
 
   items.forEach((item, i) => {
@@ -1465,7 +1538,7 @@ function renderSplitStory(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     h: 3.45,
     line: { color: colors[accent], transparency: 28, width: 1.1 },
   });
-  page.addText("¡ú", {
+  page.addText("â†’", {
     x: 6.15,
     y: 3.35,
     w: 0.6,
@@ -1592,7 +1665,7 @@ function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Acce
   });
   addBeforeAfterBlock(page, "Before", before, 1.18, 2.82, accent, false);
   addBeforeAfterBlock(page, "After", after, 7.36, 2.82, accent, true);
-  page.addText("¡ú", {
+  page.addText("â†’", {
     x: 5.78,
     y: 3.33,
     w: 0.7,
@@ -1999,7 +2072,7 @@ function compactText(value: string, maxLength: number) {
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
-  const rows = items.length ? items.slice(0, 5) : ["ºËÐÄ¹Ûµã", "Ö§³ÅÖ¤¾Ý", "ÏÂÒ»²½ÐÐ¶¯"];
+  const rows = items.length ? items.slice(0, 5) : ["æ ¸å¿ƒè§‚ç‚¹", "æ”¯æ’‘è¯æ®", "ä¸‹ä¸€æ­¥è¡ŒåŠ¨"];
   rows.forEach((item, i) => {
     const top = y + i * 0.58;
     const fontSize = denseTextFontSize(item, 15);

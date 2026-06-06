@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
+import path from "node:path";
 
 type ParsedTextNode = string | number | boolean | null | ParsedTextNode[] | { [key: string]: ParsedTextNode };
 type ExtractedSlide = {
@@ -7,6 +8,15 @@ type ExtractedSlide = {
   text: string;
   notes?: string;
   charCount: number;
+};
+
+export type SourceImageAsset = {
+  slideNumber: number;
+  name: string;
+  mimeType: string;
+  extension: string;
+  byteLength: number;
+  dataUri: string;
 };
 
 const parser = new XMLParser({
@@ -27,6 +37,7 @@ export async function extractTextFromPptx(buffer: Buffer) {
 
   const slides: ExtractedSlide[] = [];
   const brandColors = await extractBrandColors(zip, slideFiles);
+  const sourceImages = await extractSourceImages(zip, slideFiles);
 
   for (const fileName of slideFiles) {
     const xml = await zip.files[fileName]?.async("text");
@@ -63,9 +74,73 @@ export async function extractTextFromPptx(buffer: Buffer) {
     extractableSlideCount: extractableSlides.length,
     extractableCharCount,
     brandColors,
+    sourceImages,
     slides,
     text: combined.slice(0, 28000),
   };
+}
+
+async function extractSourceImages(zip: JSZip, slideFiles: string[]): Promise<SourceImageAsset[]> {
+  const maxImages = Number(process.env.SOURCE_IMAGE_MAX_COUNT || 24);
+  const maxTotalBytes = Number(process.env.SOURCE_IMAGE_MAX_TOTAL_BYTES || 70 * 1024 * 1024);
+  const result: SourceImageAsset[] = [];
+  let totalBytes = 0;
+
+  for (const slideFile of slideFiles) {
+    if (result.length >= maxImages || totalBytes >= maxTotalBytes) break;
+    const slideNumber = getSlideNumber(slideFile);
+    const relsName = `ppt/slides/_rels/slide${slideNumber}.xml.rels`;
+    const relsXml = await zip.files[relsName]?.async("text");
+    if (!relsXml) continue;
+
+    const targets = extractImageRelationshipTargets(relsXml)
+      .map((target) => resolvePptxRelationshipTarget("ppt/slides", target))
+      .filter((target) => Boolean(zip.files[target]));
+
+    const uniqueTargets = Array.from(new Set(targets)).slice(0, 3);
+    for (const target of uniqueTargets) {
+      if (result.length >= maxImages || totalBytes >= maxTotalBytes) break;
+      const mimeType = imageMimeType(target);
+      if (!mimeType) continue;
+      const buffer = await zip.files[target]?.async("nodebuffer");
+      if (!buffer?.byteLength) continue;
+      if (totalBytes + buffer.byteLength > maxTotalBytes) break;
+      const extension = path.posix.extname(target).replace(".", "").toLowerCase();
+      result.push({
+        slideNumber,
+        name: path.posix.basename(target),
+        mimeType,
+        extension,
+        byteLength: buffer.byteLength,
+        dataUri: `data:${mimeType};base64,${buffer.toString("base64")}`,
+      });
+      totalBytes += buffer.byteLength;
+    }
+  }
+
+  return result;
+}
+
+function extractImageRelationshipTargets(xml: string) {
+  const targets: string[] = [];
+  for (const match of xml.matchAll(/<Relationship\b[^>]*Type="[^"]+\/image"[^>]*Target="([^"]+)"/g)) {
+    targets.push(decodeXml(match[1]));
+  }
+  return targets;
+}
+
+function resolvePptxRelationshipTarget(baseDir: string, target: string) {
+  const cleanTarget = target.replace(/\\/g, "/");
+  if (cleanTarget.startsWith("/")) return cleanTarget.replace(/^\/+/, "");
+  return path.posix.normalize(path.posix.join(baseDir, cleanTarget));
+}
+
+function imageMimeType(fileName: string) {
+  const ext = path.posix.extname(fileName).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".gif") return "image/gif";
+  return null;
 }
 
 async function extractBrandColors(zip: JSZip, slideFiles: string[]) {

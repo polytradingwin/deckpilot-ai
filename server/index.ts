@@ -251,8 +251,10 @@ app.post("/api/generate-ppt", upload.single("file"), async (req, res) => {
       return;
     }
 
-    const generationInput = signedSourceFile ? await withUploadedPptxText(input, signedSourceFile) : input;
-    const { deck, file, filename, asciiFilename, record, updatedUser } = await generateAndSaveDeck(user.id, generationInput);
+    const prepared = signedSourceFile ? await withUploadedPptxText(input, signedSourceFile) : { input, assets: undefined };
+    const { deck, file, filename, asciiFilename, record, updatedUser } = await generateAndSaveDeck(user.id, prepared.input, {
+      assets: prepared.assets,
+    });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader(
