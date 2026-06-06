@@ -19,8 +19,8 @@ export async function generateAndSaveDeck(userId: string, input: PresentationReq
   const { deck, file: draftFile } = await createRenderedDeckWithValidation(input, options.assets);
   const filename = safeFilename(deck.title || "deckevo-presentation");
   await savePptxFile(`drafts/${generationId}.pptx`, draftFile);
-  const highQualityFile = await renderHighQualityDeckToPptx(deck, options.assets);
-  const file = shouldFinalizeHighQualityWithCanva() ? await processPptxWithCanva(highQualityFile, `${filename}.pptx`) : highQualityFile;
+  await saveVisualReference(generationId, deck, options.assets);
+  const file = shouldFinalizeEditableWithCanva() ? await processPptxWithCanva(draftFile, `${filename}.pptx`) : draftFile;
   const record = await saveGeneration(userId, input, deck, file, filename, creditCost, { id: generationId });
   await consumeCredits(userId, creditCost);
   const updatedUser = await getUserById(userId);
@@ -35,8 +35,18 @@ export async function generateAndSaveDeck(userId: string, input: PresentationReq
   };
 }
 
-function shouldFinalizeHighQualityWithCanva() {
-  return process.env.HIGH_QUALITY_CANVA_FINALIZE === "1";
+async function saveVisualReference(generationId: string, deck: Awaited<ReturnType<typeof createDeckWithAI>>, assets?: GenerationAssets) {
+  if (process.env.SAVE_VISUAL_REFERENCE !== "1") return;
+  try {
+    const visualFile = await renderHighQualityDeckToPptx(deck, assets);
+    await savePptxFile(`visuals/${generationId}.pptx`, visualFile);
+  } catch (error) {
+    console.warn("visual reference render skipped", error instanceof Error ? error.message : error);
+  }
+}
+
+function shouldFinalizeEditableWithCanva() {
+  return process.env.EDITABLE_CANVA_FINALIZE === "1";
 }
 
 async function createRenderedDeckWithValidation(input: PresentationRequest, assets?: GenerationAssets) {

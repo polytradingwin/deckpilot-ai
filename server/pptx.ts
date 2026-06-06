@@ -164,8 +164,8 @@ export async function renderDeckToPptx(deck: DeckSpec, assets: RenderAssets = {}
   deck.slides.forEach((slide, index) => {
     const page = pptx.addSlide();
     paintBackground(page, accent, index, template);
-    renderSlide(page, slide, index, deck.slides.length, accent, template);
     addSourceImage(page, slide, index, assets, template, accent);
+    renderSlide(page, slide, index, deck.slides.length, accent, template);
     if (slide.speakerNotes) page.addNotes(slide.speakerNotes);
   });
 
