@@ -916,14 +916,14 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
         margin: 0,
       });
     });
-    addMetricCard(page, slide.metric?.label || "Decision", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
+    addMetricCard(page, slide.metric?.label || "关键判断", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
     addTakeaway(page, slide.takeaway, accent);
     return;
   }
 
   if (template === "dataGrid" || template === "productNeon") {
     page.addText(slide.title, titleOptions());
-    const items = (slide.body || ["Signal", "Constraint", "Move", "Owner"]).slice(0, 4);
+    const items = fallbackSlideItems(slide, 4);
     items.forEach((item, i) => {
       const x = 0.82 + i * 2.95;
       page.addShape("rect", {
@@ -1007,7 +1007,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   if (slide.metric) {
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
   } else {
-    addMetricCard(page, "Decision", "01", slide.visual || "recommended path", accent);
+    addMetricCard(page, "关键判断", "01", slide.visual || slide.takeaway || "核心建议", accent);
   }
   addTakeaway(page, slide.takeaway, accent);
 }
@@ -1227,7 +1227,7 @@ function renderClosing(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
     color: colors.text,
     margin: 0,
   });
-  const items = (slide.body || ["Confirm decision", "Assign owner", "Start next sprint"]).slice(0, 3);
+  const items = fallbackSlideItems(slide, 3);
   items.forEach((item, i) => {
     const x = 0.82 + i * 4.0;
     page.addShape("rect", {
@@ -1266,7 +1266,7 @@ function renderClosing(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
 function renderComparison(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
   const body = slide.body || [];
-  const labels = ["Input", "Process", "Output"];
+  const labels = ["输入", "过程", "输出"];
 
   labels.forEach((label, i) => {
     page.addShape("rect", {
@@ -1485,7 +1485,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     fill: { color: colors.panel2, transparency: 4 },
     line: { color: colors[accent], transparency: 16, width: 1.2 },
   });
-  page.addText(slide.metric?.label || "Primary signal", {
+  page.addText(slide.metric?.label || "核心信号", {
     x: 7.82,
     y: 1.92,
     w: 2.6,
@@ -1507,7 +1507,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     color: colors.text,
     margin: 0,
   });
-  page.addText(slide.metric?.context || slide.visual || "decision-grade evidence", {
+  page.addText(slide.metric?.context || slide.visual || "关键证据", {
     x: 7.84,
     y: 3.58,
     w: 3.15,
@@ -1524,12 +1524,12 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
 
 function renderSplitStory(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = slide.body?.length ? slide.body : ["Current state", "Target state", "Decision implication"];
+  const items = fallbackSlideItems(slide, 3);
   const left = items.slice(0, Math.ceil(items.length / 2));
   const right = items.slice(Math.ceil(items.length / 2));
 
-  renderStoryColumn(page, "Current logic", left, 0.82, 2.18, accent, false);
-  renderStoryColumn(page, "Better path", right.length ? right : [slide.takeaway || "Clarify the next move"], 7.02, 2.18, accent, true);
+  renderStoryColumn(page, "当前理解", left, 0.82, 2.18, accent, false);
+  renderStoryColumn(page, "优化方向", right.length ? right : [slide.takeaway || "明确下一步"], 7.02, 2.18, accent, true);
 
   page.addShape("line", {
     x: 6.45,
@@ -1602,7 +1602,7 @@ function renderThreeCards(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
       margin: 0,
     });
   }
-  const items = (slide.body?.length ? slide.body : ["Pillar one", "Pillar two", "Pillar three"]).slice(0, 3);
+  const items = fallbackSlideItems(slide, 3);
   items.forEach((item, i) => {
     const x = 0.82 + i * 3.95;
     const isLead = i === 0;
@@ -1642,10 +1642,10 @@ function renderThreeCards(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
 
 function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = slide.body?.length ? slide.body : ["Before: fragmented material", "After: structured executive deck", "Result: clearer decision path"];
-  const before = items[0] || "Before";
-  const after = items[1] || slide.takeaway || "After";
-  const result = items[2] || slide.metric?.context || "Result";
+  const items = fallbackSlideItems(slide, 3);
+  const before = items[0] || "现状";
+  const after = items[1] || slide.takeaway || "优化后";
+  const result = items[2] || slide.metric?.context || "结果";
 
   page.addShape("rect", {
     x: 0.82,
@@ -1663,8 +1663,8 @@ function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Acce
     fill: { color: colors[accent], transparency: 82 },
     line: { color: colors[accent], transparency: 14 },
   });
-  addBeforeAfterBlock(page, "Before", before, 1.18, 2.82, accent, false);
-  addBeforeAfterBlock(page, "After", after, 7.36, 2.82, accent, true);
+  addBeforeAfterBlock(page, "之前", before, 1.18, 2.82, accent, false);
+  addBeforeAfterBlock(page, "之后", after, 7.36, 2.82, accent, true);
   page.addText("→", {
     x: 5.78,
     y: 3.33,
@@ -1718,8 +1718,8 @@ function addBeforeAfterBlock(page: PptxGenJS.Slide, label: string, text: string,
 
 function renderInsightGrid(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const items = (slide.body?.length ? slide.body : ["Insight one", "Insight two", "Insight three", "Insight four"]).slice(0, 4);
-  const labels = ["Signal", "Evidence", "Risk", "Move"];
+  const items = fallbackSlideItems(slide, 4);
+  const labels = ["信号", "证据", "风险", "行动"];
 
   items.forEach((item, i) => {
     const x = 0.82 + (i % 2) * 5.1;
@@ -1774,7 +1774,7 @@ function renderProcess(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
     });
   }
 
-  const steps = (slide.body || ["Input", "Transform", "Review", "Deliver"]).slice(0, 5);
+  const steps = fallbackSlideItems(slide, 5);
   const startX = 0.78;
   const cardW = steps.length > 4 ? 2.14 : 2.58;
   const gap = steps.length > 4 ? 0.18 : 0.32;
@@ -1827,8 +1827,8 @@ function renderProcess(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) 
 
 function renderCaseStudy(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
-  const labels = ["Situation", "Move", "Result"];
-  const items = (slide.body || ["Current constraint", "Recommended intervention", "Expected outcome"]).slice(0, 3);
+  const labels = ["背景", "动作", "结果"];
+  const items = fallbackSlideItems(slide, 3);
 
   labels.forEach((label, i) => {
     const x = 0.82 + i * 3.95;
@@ -1941,7 +1941,7 @@ function renderQuote(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       fill: { color: colors.panel2, transparency: 5 },
       line: { color: colors.line, transparency: 16 },
     });
-    page.addText("Decision", {
+    page.addText("关键判断", {
       x: 9.82,
       y: 4.26,
       w: 1.3,
@@ -1951,7 +1951,7 @@ function renderQuote(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       color: colors[accent],
       margin: 0,
     });
-    page.addText("Now", {
+    page.addText("现在", {
       x: 9.82,
       y: 4.55,
       w: 1.3,
@@ -2053,17 +2053,29 @@ function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent
 }
 
 function buildDashboardCards(slide: DeckSlide) {
-  const body = slide.body || [];
+  const body = fallbackSlideItems(slide, 4);
   const cards = [
-    { label: slide.metric?.label || "Primary", value: slide.metric?.value || body[0] || "01" },
-    { label: "Momentum", value: body[1] || "On track" },
-    { label: "Constraint", value: body[2] || "Known risk" },
-    { label: "Next move", value: body[3] || "Owner set" },
+    { label: slide.metric?.label || "核心信号", value: slide.metric?.value || body[0] || "01" },
+    { label: "关键进展", value: body[1] || "持续推进" },
+    { label: "主要约束", value: body[2] || "待验证风险" },
+    { label: "下一步", value: body[3] || "明确责任" },
   ];
   return cards.map((card) => ({
     label: compactText(card.label, 18),
     value: compactText(card.value, 52),
   }));
+}
+
+function fallbackSlideItems(slide: DeckSlide, count: number) {
+  const sourceItems = [
+    ...(slide.body || []),
+    slide.subtitle,
+    slide.takeaway,
+    slide.visual,
+    slide.metric?.context,
+  ].filter(Boolean) as string[];
+  const defaults = ["核心要点", "关键说明", "应用示例", "限制与挑战", "下一步思考"];
+  return [...sourceItems, ...defaults].slice(0, count);
 }
 
 function compactText(value: string, maxLength: number) {

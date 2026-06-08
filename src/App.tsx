@@ -353,9 +353,7 @@ function App() {
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("presenting");
   const [style, setStyle] = useState<Style>("consulting");
   const [audience, setAudience] = useState("高管 / 客户决策层");
-  const [prompt, setPrompt] = useState(
-    "为一家企业 AI 知识库产品制作销售方案，目标客户是大型制造企业，需要突出部署效率、数据安全和 ROI。",
-  );
+  const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [generationError, setGenerationError] = useState("");
@@ -606,7 +604,13 @@ function App() {
         ? "PPT 用途：给人讲。请强化现场讲述节奏、转场、演讲逻辑和一页一个关键结论。"
         : "PPT 用途：给人看。请强化自解释结构、摘要结论、信息完整性和可独立阅读的页面层级。";
     const generationAudience = `${audience}；${deliveryMode === "presenting" ? "现场讲述" : "异步阅读"}`;
-    const generationPrompt = [deliveryPrompt, prompt].filter(Boolean).join("\n\n");
+    const generationPrompt = [
+      "USER_SOURCE_MATERIAL_START",
+      prompt.trim() || "(用户未输入正文)",
+      "USER_SOURCE_MATERIAL_END",
+      "",
+      deliveryPrompt,
+    ].join("\n");
 
     if (source === "ppt" && selectedFile) {
       if (selectedFile.size > signedUploadLimitBytes) {
@@ -1374,6 +1378,11 @@ async function countPptxSlides(file: File) {
 }
 
 function estimateOutlineSlides(text: string) {
+  const headings = text.match(/^#{1,3}\s*\d+[.、\s].+$/gm) || text.match(/^#{1,3}\s+.+$/gm) || [];
+  if (headings.length >= 4) {
+    return Math.max(6, Math.min(30, headings.length + 2));
+  }
+
   const compactLength = text.replace(/\s+/g, "").length;
   if (compactLength <= 120) return 6;
   if (compactLength <= 500) return 8;

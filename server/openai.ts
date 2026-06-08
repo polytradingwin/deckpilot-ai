@@ -185,7 +185,7 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
 
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
   const errors: string[] = [];
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await createAnthropicMessage(apiKey, model, input, errors[errors.length - 1]);
       const text = extractAnthropicText(response);
@@ -196,6 +196,7 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
       const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck);
       const deck = normalizeDeck(refinedDeck || draftDeck, input);
       validateSourceAnchors(deck, input);
+      validateSourceCoverage(deck, input);
       return deck;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -211,7 +212,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
   const errors: string[] = [];
 
   for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const response = await createResponse(apiKey, model, input, errors[errors.length - 1]);
         const text = extractOutputText(response);
@@ -220,6 +221,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
         }
         const deck = normalizeDeck(parseDeckJson(text), input);
         validateSourceAnchors(deck, input);
+        validateSourceCoverage(deck, input);
         return deck;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -351,7 +353,7 @@ function buildClaudeRefinementPrompt(input: PresentationRequest, draftDeck: Deck
     "Improve this draft deck JSON. Return only the complete improved JSON object, with the same schema.",
     "",
     "Source material summary:",
-    compactPromptText(input.prompt, 14000),
+    compactPromptText(extractUserSourceMaterial(input.prompt), 14000),
     "",
     "Hidden review criteria:",
     "- Preserve the user's facts, entities, sequence, and conclusions.",
@@ -485,6 +487,8 @@ function stripJsonFence(text: string) {
 function buildUserPrompt(input: PresentationRequest, previousError?: string) {
   const requestedSlides = clampSlideCount(input.slides);
   const visualDirection = pickVisualDirection(input);
+  const sourceMaterial = extractUserSourceMaterial(input.prompt);
+  const explicitSections = extractExplicitMarkdownSections(sourceMaterial);
 
   return [
     previousError ? `Previous generation failed validation: ${previousError}` : "",
@@ -498,13 +502,27 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     `Audience: ${input.audience}`,
     `Visual direction for this generation: ${visualDirection}`,
     ...requiredAnchorPrompt(input),
-    "User material:",
-    input.prompt || "(No text provided.)",
+    "USER SOURCE MATERIAL (authoritative; use only this as deck content):",
+    sourceMaterial || "(No text provided.)",
+    explicitSections.length ? "" : "",
+    explicitSections.length ? "Required source sections to preserve in order:" : "",
+    ...explicitSections.map((section, index) => `${index + 1}. ${section.title}`),
     "",
     "Requirements:",
     `- Produce exactly ${requestedSlides} slides.`,
+    "- The source material above is authoritative. Do not replace it with a generic business story, consulting story, AI/SaaS sales story, fundraising story, or unrelated examples.",
+    explicitSections.length
+      ? `- The source contains ${explicitSections.length} required sections. Create at least one visible slide for every required section, in the same order.`
+      : "",
+    explicitSections.length
+      ? "- Do not split one source section into multiple detail slides until every required source section already has at least one visible slide."
+      : "",
+    explicitSections.length
+      ? "- Recommended allocation: cover, concise narrative map, one slide per required source section, then synthesis/closing only if slides remain."
+      : "",
+    ...explicitSections.map((section) => `- Required section to cover explicitly: ${section.title}`),
     ...sourceSpecificRequirements(input),
-    ...structureRequirements(input),
+    ...structureRequirements(input, explicitSections.length),
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
     "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy or beforeAfter for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, splitStory for two-sided reasoning, threeCards for 3 pillars, insightGrid for 4 related insights.",
     "- Content-to-layout rules: numbers/KPIs -> heroMetric/dashboard/chart; steps/process/time -> process/timeline; pros/cons or old/new -> comparison/beforeAfter/splitStory; 3 capabilities/pillars -> threeCards; 4 findings/risks/priorities -> insightGrid/matrix; strong recommendation -> quote/closing.",
@@ -540,7 +558,7 @@ function requiredAnchorPrompt(input: PresentationRequest) {
   ];
 }
 
-function structureRequirements(input: PresentationRequest) {
+function structureRequirements(input: PresentationRequest, explicitSectionCount = 0) {
   if (input.source === "ppt") {
     return [
       "- Preserve the uploaded deck's page order unless the user explicitly asks for a new order.",
@@ -551,7 +569,10 @@ function structureRequirements(input: PresentationRequest) {
   }
 
   return [
-    "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
+    explicitSectionCount
+      ? "- Start with a cover slide and a short narrative map only if there is room; never sacrifice required source sections for a generic executive summary."
+      : "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
+    explicitSectionCount ? "- For markdown or numbered source sections, preserve the source sequence and make section coverage more important than adding generic synthesis pages." : "",
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
     "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison/beforeAfter for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix/insightGrid for priorities or risk mapping, threeCards for pillars, quote for decisive recommendations.",
   ];
@@ -624,7 +645,28 @@ function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
   const anchors = input.sourceAnchors?.length ? input.sourceAnchors.slice(0, 16) : extractRequiredSourceAnchors(input);
   if (!anchors.length) return;
 
-  const deckText = [
+  const deckText = collectDeckText(deck);
+
+  const missing = anchors.filter((anchor) => !deckText.includes(anchor));
+  if (missing.length) {
+    throw new Error(`Source anchor terms missing from generated deck: ${missing.join(", ")}`);
+  }
+}
+
+function validateSourceCoverage(deck: DeckSpec, input: PresentationRequest) {
+  const sourceMaterial = extractUserSourceMaterial(input.prompt);
+  const sections = extractExplicitMarkdownSections(sourceMaterial).slice(0, 16);
+  if (sections.length < 2) return;
+
+  const deckText = normalizeComparableText(collectVisibleDeckText(deck));
+  const missing = sections.filter((section) => !sectionCovered(deckText, section.title));
+  if (missing.length) {
+    throw new Error(`Generated deck omitted source sections: ${missing.map((section) => section.title).join(", ")}`);
+  }
+}
+
+function collectDeckText(deck: DeckSpec) {
+  return [
     deck.title,
     deck.subtitle,
     ...deck.slides.flatMap((slide) => [
@@ -644,16 +686,68 @@ function validateSourceAnchors(deck: DeckSpec, input: PresentationRequest) {
   ]
     .filter(Boolean)
     .join("\n");
+}
 
-  const missing = anchors.filter((anchor) => !deckText.includes(anchor));
-  if (missing.length) {
-    throw new Error(`Source anchor terms missing from generated deck: ${missing.join(", ")}`);
-  }
+function collectVisibleDeckText(deck: DeckSpec) {
+  return [
+    deck.title,
+    deck.subtitle,
+    ...deck.slides.flatMap((slide) => [
+      slide.kicker,
+      slide.title,
+      slide.subtitle,
+      ...(slide.body || []),
+      slide.takeaway,
+      slide.metric?.label,
+      slide.metric?.value,
+      slide.metric?.context,
+      slide.chart?.title,
+      ...(slide.chart?.labels || []),
+    ]),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function sectionCovered(deckText: string, title: string) {
+  const normalizedTitle = normalizeComparableText(title);
+  if (!normalizedTitle) return true;
+  if (deckText.includes(normalizedTitle)) return true;
+  const simplifiedTitle = normalizedTitle.replace(/什么是|入门|基础|概述|的/g, "");
+  if (simplifiedTitle.length >= 2 && deckText.includes(simplifiedTitle)) return true;
+
+  const keyTerms = normalizedTitle
+    .split(/[，。；、:：\s/]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2);
+  return keyTerms.length > 0 && keyTerms.some((term) => deckText.includes(term));
+}
+
+function normalizeComparableText(value: string) {
+  return String(value || "")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*\d+[.、\s]+/gm, "")
+    .replace(/[\s:：，,。；;《》“”"']/g, "")
+    .toLowerCase();
+}
+
+function extractUserSourceMaterial(prompt: string) {
+  const match = String(prompt || "").match(/USER_SOURCE_MATERIAL_START\s*([\s\S]*?)\s*USER_SOURCE_MATERIAL_END/);
+  return (match?.[1] || prompt || "").trim();
+}
+
+function extractExplicitMarkdownSections(text: string) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*#{1,3}\s*(?:\d+[.、]\s*)?(.+?)\s*$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match?.[1]))
+    .map((match) => ({ title: match[1].trim() }))
+    .filter((section) => section.title.length > 0);
 }
 
 function extractRequiredSourceAnchors(input: PresentationRequest) {
   if (input.sourceAnchors?.length) return input.sourceAnchors.slice(0, 16);
-  const text = input.prompt || "";
+  const text = extractUserSourceMaterial(input.prompt);
   const anchors = new Set<string>();
 
   for (const match of text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
@@ -816,12 +910,15 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     });
   }
 
-  const enhancedSlides = slides.map((slide, index) => ({
-    ...slide,
-    layout: improveLayoutForContent(slide, index, targetCount, input),
-    body: trimSlideBody(slide.body),
-    sourceSlides: normalizeSourceSlides(slide.sourceSlides, index, input),
-  }));
+  const enhancedSlides = slides.map((slide, index) => {
+    const normalizedBody = trimSlideBody(normalizeSlideBody(slide.body));
+    const normalizedSlide = { ...slide, body: normalizedBody };
+    return {
+      ...normalizedSlide,
+      layout: improveLayoutForContent(normalizedSlide, index, targetCount, input),
+      sourceSlides: normalizeSourceSlides(slide.sourceSlides, index, input),
+    };
+  });
 
   return {
     title: deck.title || fallbackTitle(input, 0),
@@ -866,6 +963,20 @@ function improveLayoutForContent(
   if (itemCount === 3) return "threeCards";
   if (itemCount >= 4) return "insightGrid";
   return slide.layout;
+}
+
+function normalizeSlideBody(body: unknown) {
+  if (Array.isArray(body)) {
+    return body.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (typeof body === "string") {
+    return body
+      .split(/\r?\n|[；;。]\s*/)
+      .map((item) => item.replace(/^[-•]\s*/, "").trim())
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+  return undefined;
 }
 
 function trimSlideBody(body: string[] | undefined) {
