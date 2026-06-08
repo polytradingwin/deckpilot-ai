@@ -3,7 +3,7 @@ import type { DeckSpec, PresentationRequest } from "../src/shared/deck";
 import { isOpenAIQuotaOrRateLimit } from "./userErrors";
 
 export const DEFAULT_MODEL = "gpt-5.2";
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const FALLBACK_MODELS = ["gpt-5.1", "gpt-5-mini"];
 let configuredProxy: string | null = null;
 
