@@ -3,7 +3,7 @@ import type { DeckSpec, PresentationRequest } from "../src/shared/deck";
 import { isOpenAIQuotaOrRateLimit } from "./userErrors";
 
 export const DEFAULT_MODEL = "gpt-5.2";
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
 const FALLBACK_MODELS = ["gpt-5.1", "gpt-5-mini"];
 let configuredProxy: string | null = null;
 
@@ -192,7 +192,9 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
       if (!text) {
         throw new Error("Anthropic did not return a structured deck.");
       }
-      const deck = normalizeDeck(parseDeckJson(text), input);
+      const draftDeck = normalizeDeck(parseDeckJson(text), input);
+      const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck);
+      const deck = normalizeDeck(refinedDeck || draftDeck, input);
       validateSourceAnchors(deck, input);
       return deck;
     } catch (error) {
@@ -302,6 +304,70 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
   }
 
   return (await response.json()) as AnthropicResponse;
+}
+
+async function refineDeckWithAnthropic(apiKey: string, model: string, input: PresentationRequest, draftDeck: DeckSpec) {
+  if (process.env.CLAUDE_REFINEMENT === "0") return null;
+
+  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": process.env.ANTHROPIC_VERSION || "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: getMaxOutputTokens(input.slides),
+      temperature: 0.25,
+      system: [
+        buildSystemPrompt(),
+        "You are now acting as a hidden presentation creative director and quality reviewer.",
+        "The user will not see your critique. Improve the JSON deck directly.",
+        "Review for content logic, visual hierarchy, slide-to-slide rhythm, image placement intent, and editable PowerPoint feasibility.",
+        "Avoid fixed template thinking. Keep the rendering schema, but make every slide feel specifically designed for the source material.",
+      ].join("\n"),
+      messages: [
+        {
+          role: "user",
+          content: buildClaudeRefinementPrompt(input, draftDeck),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    console.warn(await formatAnthropicError(response, model));
+    return null;
+  }
+
+  const text = extractAnthropicText((await response.json()) as AnthropicResponse);
+  if (!text) return null;
+  return parseDeckJson(text);
+}
+
+function buildClaudeRefinementPrompt(input: PresentationRequest, draftDeck: DeckSpec) {
+  return [
+    "Improve this draft deck JSON. Return only the complete improved JSON object, with the same schema.",
+    "",
+    "Source material summary:",
+    compactPromptText(input.prompt, 14000),
+    "",
+    "Hidden review criteria:",
+    "- Preserve the user's facts, entities, sequence, and conclusions.",
+    "- Improve slide titles into sharp message sentences.",
+    "- Make layouts less repetitive and more content-specific.",
+    "- Make the deck feel layered: strong statement pages, evidence pages, visual explanation pages, and decision pages.",
+    "- Use sourceSlides consistently for uploaded PPT redesigns.",
+    "- Keep text short enough for editable PPT text boxes.",
+    "- For images/screenshots, keep visual directions clear and reserve room for source assets.",
+    "- Do not add any user-facing Claude explanation or review notes.",
+    "",
+    "Draft JSON:",
+    JSON.stringify(draftDeck),
+    "",
+    "Return only JSON. No markdown.",
+  ].join("\n");
 }
 
 function buildSystemPrompt() {
@@ -427,7 +493,6 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     `Use case: ${input.purpose}`,
     `Visual style: ${input.style}`,
     `Style guidance: ${styleGuidance(input.style)}`,
-    `Template guidance: ${templateGuidance(input.style)}`,
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
@@ -453,7 +518,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Add a short takeaway to most non-cover slides.",
     "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
-    "- Set theme.template to the best visual system for the material: executiveDark, editorialLight, dataGrid, productNeon, warmBoardroom, academicPaper, creativePitch, corporateClean, brandGradient, or internalOps.",
+    "- Choose theme.template only as a hidden rendering hint for the editable PPTX engine. Do not think in fixed templates.",
     "- If the user's material mentions brand colors, VI, logo colors, primary colors, or includes obvious brand color words/hex codes, set theme.paletteIntent to brand and set theme.brandPrimary / theme.brandSecondary as hex colors.",
     "- If this is an agency/vendor-to-client presentation, campaign proposal, brand launch, sales pitch, or creative concept, prefer creativePitch or brandGradient with expressive color and bigger visual rhythm.",
     "- If this is company internal reporting, weekly/monthly review, department work summary, OKR, operation review, or management sync, prefer corporateClean, internalOps, or dataGrid with clear hierarchy and more varied but controlled colors.",
