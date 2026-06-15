@@ -189,9 +189,10 @@ function statCard(item: string, x: number, y: number, theme: Theme, index: numbe
 }
 
 function visualFallback(slide: DeckSlide, x: number, y: number, w: number, h: number, theme: Theme) {
+  const label = compact(slide.takeaway || slide.subtitle || slide.body?.[0] || "核心信息", 42);
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="34" fill="${theme.panel2}" opacity="0.88" stroke="${theme.line}" stroke-width="2"/>
     <path d="M${x + 54} ${y + h - 70} L${x + 160} ${y + h - 178} L${x + 276} ${y + h - 124} L${x + 402} ${y + 86} L${x + w - 58} ${y + 142}" fill="none" stroke="${theme.accent}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity="0.86"/>
-    <text x="${x + 54}" y="${y + 74}" ${textStyle(24, 800, theme.accent)}>${escapeXml(slide.visual || "Visual system")}</text>`;
+    <text x="${x + 54}" y="${y + 74}" ${textStyle(24, 800, theme.accent)}>${escapeXml(label)}</text>`;
 }
 
 function footer(takeaway: string | undefined, theme: Theme) {

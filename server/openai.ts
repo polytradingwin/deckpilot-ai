@@ -523,6 +523,11 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     explicitSections.length ? "" : "",
     explicitSections.length ? "Required source sections to preserve in order:" : "",
     ...explicitSections.map((section, index) => `${index + 1}. ${section.title}`),
+    explicitSections.length ? "" : "",
+    explicitSections.length ? "Required source details to keep visible when present:" : "",
+    ...explicitSections.flatMap((section, sectionIndex) =>
+      section.body.slice(0, 8).map((line, lineIndex) => `${sectionIndex + 1}.${lineIndex + 1} ${compactPromptText(line, 120)}`),
+    ),
     !explicitSections.length && sourceUnits.length ? "" : "",
     !explicitSections.length && sourceUnits.length ? "Detected source content units to preserve:" : "",
     ...(!explicitSections.length ? sourceUnits.map((unit, index) => `${index + 1}. ${unit.title}`) : []),
@@ -533,6 +538,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "Requirements:",
     `- Produce exactly ${requestedSlides} slides.`,
     "- The source material above is authoritative. Do not replace it with a generic business story, consulting story, AI/SaaS sales story, fundraising story, or unrelated examples.",
+    "- Preserve the user's concrete bullets, examples, named tools, names, metrics, and terms. You may rewrite for clarity, but do not omit them unless there is not enough slide space.",
+    "- Never output placeholder text such as ????, TBD, TODO, lorem ipsum, or unclear question marks. If information is missing, use a concrete source-backed statement or omit that element.",
     explicitSections.length
       ? `- The source contains ${explicitSections.length} required sections. Create at least one visible slide for every required section, in the same order.`
       : "",
@@ -560,7 +567,7 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
     "- Add a short takeaway to most non-cover slides.",
-    "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary.",
+    "- Add a visual direction for most slides, such as process map, KPI card, comparison table, or executive summary. Visual directions are internal and must never appear as visible slide text.",
     "- Add metric when a slide benefits from a large evidence number or decision KPI.",
     "- Choose theme.template only as a hidden rendering hint for the editable PPTX engine. Do not think in fixed templates.",
     "- If the user's material mentions brand colors, VI, logo colors, primary colors, or includes obvious brand color words/hex codes, set theme.paletteIntent to brand and set theme.brandPrimary / theme.brandSecondary as hex colors.",
@@ -891,8 +898,21 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   }
 
   const enhancedSlides = slides.map((slide, index) => {
+    const fallbackSlide = sourceBackedFallbackSlide(input, index);
     const normalizedBody = trimSlideBody(normalizeSlideBody(slide.body));
-    const normalizedSlide = { ...slide, body: normalizedBody };
+    const fallbackBody = trimSlideBody(normalizeSlideBody(fallbackSlide.body));
+    const normalizedMetric = normalizeMetric(slide.metric);
+    const normalizedSlide = {
+      ...slide,
+      kicker: cleanGeneratedText(slide.kicker),
+      title: cleanGeneratedText(slide.title) || fallbackSlide.title || fallbackTitle(input, index),
+      subtitle: cleanGeneratedText(slide.subtitle),
+      body: normalizedBody?.length ? normalizedBody : fallbackBody,
+      takeaway: cleanGeneratedText(slide.takeaway) || fallbackSlide.takeaway,
+      speakerNotes: cleanGeneratedText(slide.speakerNotes),
+      visual: cleanGeneratedText(slide.visual),
+      metric: normalizedMetric,
+    };
     return {
       ...normalizedSlide,
       layout: improveLayoutForContent(normalizedSlide, index, targetCount, input),
@@ -1030,12 +1050,13 @@ function improveLayoutForContent(
 
 function normalizeSlideBody(body: unknown) {
   if (Array.isArray(body)) {
-    return body.map((item) => String(item || "").trim()).filter(Boolean);
+    return body.map((item) => cleanGeneratedText(item)).filter(Boolean);
   }
   if (typeof body === "string") {
     return body
       .split(/\r?\n|[；;。]\s*/)
       .map((item) => item.replace(/^[-•]\s*/, "").trim())
+      .map((item) => cleanGeneratedText(item))
       .filter(Boolean)
       .slice(0, 5);
   }
@@ -1044,11 +1065,40 @@ function normalizeSlideBody(body: unknown) {
 
 function trimSlideBody(body: string[] | undefined) {
   if (!body?.length) return body;
-  return body.slice(0, 5).map((item) => compactPromptText(item, 82));
+  return body.slice(0, 5).map((item) => compactPromptText(item, 82)).filter(Boolean);
 }
 
-function compactPromptText(value: string, maxLength: number) {
+function normalizeMetric(metric: DeckSpec["slides"][number]["metric"]) {
+  if (!metric) return undefined;
+  const label = cleanGeneratedText(metric.label);
+  const value = cleanGeneratedText(metric.value);
+  const context = cleanGeneratedText(metric.context);
+  if (!label && !value && !context) return undefined;
+  return {
+    label: label || "关键判断",
+    value: value || "01",
+    context,
+  };
+}
+
+function cleanGeneratedText(value: unknown) {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (isPlaceholderText(normalized)) return "";
+  return normalized;
+}
+
+function isPlaceholderText(value: string) {
+  const text = value.trim();
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, "");
+  if (/^[?？]+$/.test(compact)) return true;
+  if (/^(tbd|todo|n\/a|null|undefined|placeholder|lorem ipsum)$/i.test(compact)) return true;
+  return false;
+}
+
+function compactPromptText(value: unknown, maxLength: number) {
+  const normalized = cleanGeneratedText(value);
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 

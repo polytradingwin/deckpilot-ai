@@ -794,22 +794,6 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
     margin: 0,
   });
   addBulletPanel(page, slide.body || [], titleX, 4.72, 5.7, accent);
-
-  page.addShape("rect", {
-    x: 9.08,
-    y: 1.25,
-    w: 2.85,
-    h: 4.95,
-    fill: { color: colors.panel2, transparency: 16 },
-    line: { color: colors.line, transparency: 20 },
-  });
-  page.addShape("line", {
-    x: 9.38,
-    y: 5.72,
-    w: 2.25,
-    h: 0,
-    line: { color: colors[accent], transparency: 18, width: 2 },
-  });
 }
 
 function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
@@ -2085,11 +2069,14 @@ function compactText(value: string, maxLength: number) {
 
 function normalizeTextValue(value: unknown): string {
   if (value == null) return "";
+  let normalized = "";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value).replace(/\s+/g, " ").trim();
+    normalized = String(value).replace(/\s+/g, " ").trim();
+    return isPlaceholderText(normalized) ? "" : normalized;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => normalizeTextValue(item)).filter(Boolean).join("；");
+    normalized = value.map((item) => normalizeTextValue(item)).filter(Boolean).join("；");
+    return isPlaceholderText(normalized) ? "" : normalized;
   }
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -2105,13 +2092,25 @@ function normalizeTextValue(value: unknown): string {
       .map((item) => normalizeTextValue(item))
       .filter(Boolean);
     if (parts.length) return parts.join("：");
-    return JSON.stringify(value).replace(/\s+/g, " ").trim();
+    normalized = JSON.stringify(value).replace(/\s+/g, " ").trim();
+    return isPlaceholderText(normalized) ? "" : normalized;
   }
-  return String(value).replace(/\s+/g, " ").trim();
+  normalized = String(value).replace(/\s+/g, " ").trim();
+  return isPlaceholderText(normalized) ? "" : normalized;
+}
+
+function isPlaceholderText(value: string) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, "");
+  if (/^[?？]+$/.test(compact)) return true;
+  if (/^(tbd|todo|n\/a|null|undefined|placeholder|lorem ipsum)$/i.test(compact)) return true;
+  return false;
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
-  const rows = items.length ? items.slice(0, 5) : ["核心观点", "支撑证据", "下一步行动"];
+  const cleanedItems = items.map((item) => normalizeTextValue(item)).filter(Boolean);
+  const rows = cleanedItems.length ? cleanedItems.slice(0, 5) : ["核心观点", "支撑证据", "下一步行动"];
   rows.forEach((item, i) => {
     const top = y + i * 0.58;
     const fontSize = denseTextFontSize(item, 15);
@@ -2137,7 +2136,8 @@ function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: nu
 }
 
 function addTakeaway(page: PptxGenJS.Slide, takeaway: string | undefined, accent: Accent) {
-  if (!takeaway) return;
+  const text = normalizeTextValue(takeaway);
+  if (!text) return;
   page.addShape("rect", {
     x: 0.78,
     y: 6.02,
@@ -2146,7 +2146,7 @@ function addTakeaway(page: PptxGenJS.Slide, takeaway: string | undefined, accent
     fill: { color: colors[accent], transparency: 82 },
     line: { color: colors[accent], transparency: 28 },
   });
-  page.addText(takeaway, {
+  page.addText(text, {
     x: 1.05,
     y: 6.16,
     w: 9.9,
@@ -2160,6 +2160,11 @@ function addTakeaway(page: PptxGenJS.Slide, takeaway: string | undefined, accent
 }
 
 function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, context: string | undefined, accent: Accent) {
+  const cleanLabel = normalizeTextValue(label);
+  const cleanValue = normalizeTextValue(value);
+  const cleanContext = normalizeTextValue(context);
+  if (!cleanLabel && !cleanValue && !cleanContext) return;
+
   page.addShape("rect", {
     x: 9.45,
     y: 2.05,
@@ -2168,7 +2173,7 @@ function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, cont
     fill: { color: colors.panel2, transparency: 8 },
     line: { color: colors.line, transparency: 14 },
   });
-  page.addText(label || "Metric", {
+  page.addText(cleanLabel || "关键判断", {
     x: 9.78,
     y: 2.48,
     w: 1.8,
@@ -2178,7 +2183,7 @@ function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, cont
     color: colors[accent],
     margin: 0,
   });
-  page.addText(value || "01", {
+  page.addText(cleanValue || "01", {
     x: 9.78,
     y: 3.02,
     w: 1.95,
@@ -2189,7 +2194,7 @@ function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, cont
     color: colors.text,
     margin: 0,
   });
-  page.addText(context || "decision evidence", {
+  page.addText(cleanContext || "关键证据", {
     x: 9.78,
     y: 3.92,
     w: 1.8,

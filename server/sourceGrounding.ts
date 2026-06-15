@@ -109,7 +109,7 @@ export function extractSourceAnchors(text: string, maxAnchors = 24) {
   const units = extractSourceOutlineUnits(source, 18);
   for (const unit of units) {
     const candidates = [unit.title, ...unit.body].flatMap(extractMeaningfulTerms);
-    for (const candidate of candidates.slice(0, 2)) {
+    for (const candidate of candidates.slice(0, 4)) {
       anchors.add(candidate);
     }
   }
