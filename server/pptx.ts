@@ -2067,20 +2067,50 @@ function buildDashboardCards(slide: DeckSlide) {
 }
 
 function fallbackSlideItems(slide: DeckSlide, count: number) {
+  const bodyItems = Array.isArray(slide.body) ? slide.body : [slide.body];
   const sourceItems = [
-    ...(slide.body || []),
+    ...bodyItems,
     slide.subtitle,
     slide.takeaway,
     slide.visual,
     slide.metric?.context,
-  ].filter(Boolean) as string[];
+  ]
+    .map((item) => normalizeTextValue(item))
+    .filter(Boolean);
   const defaults = ["核心要点", "关键说明", "应用示例", "限制与挑战", "下一步思考"];
   return [...sourceItems, ...defaults].slice(0, count);
 }
 
 function compactText(value: string, maxLength: number) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  const normalized = normalizeTextValue(value);
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
+}
+
+function normalizeTextValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).replace(/\s+/g, " ").trim();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeTextValue(item)).filter(Boolean).join("；");
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const parts = [
+      record.title,
+      record.label,
+      record.value,
+      record.text,
+      record.body,
+      record.description,
+      record.context,
+    ]
+      .map((item) => normalizeTextValue(item))
+      .filter(Boolean);
+    if (parts.length) return parts.join("：");
+    return JSON.stringify(value).replace(/\s+/g, " ").trim();
+  }
+  return String(value).replace(/\s+/g, " ").trim();
 }
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
