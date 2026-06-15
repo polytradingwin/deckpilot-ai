@@ -750,7 +750,7 @@ function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, te
       color: colors.muted,
       margin: 0,
     });
-    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "Q", slide.metric?.context || slide.visual, accent);
+    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "Q", slide.metric?.context || slide.takeaway || "核心信息", accent);
     addBulletPanel(page, slide.body || [], 0.86, 4.45, 6.3, accent);
     return;
   }
@@ -838,7 +838,7 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
       });
     }
     addBulletPanel(page, slide.body || [], 0.92, 2.72, 6.2, accent);
-    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
+    addMetricCard(page, slide.metric?.label || "Focus", slide.metric?.value || "01", slide.metric?.context || slide.takeaway || "核心信息", accent);
     addTakeaway(page, slide.takeaway, accent);
     return;
   }
@@ -869,8 +869,6 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
   addBulletPanel(page, slide.body || [], 0.76, 2.72, slide.metric ? 5.35 : 6.25, accent);
   if (slide.metric) {
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
-  } else {
-    addSideMetric(page, accent, slide.visual);
   }
   addTakeaway(page, slide.takeaway, accent);
 }
@@ -916,7 +914,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
         margin: 0,
       });
     });
-    addMetricCard(page, slide.metric?.label || "关键判断", slide.metric?.value || "01", slide.metric?.context || slide.visual, accent);
+    addMetricCard(page, slide.metric?.label || "关键判断", slide.metric?.value || "01", slide.metric?.context || slide.takeaway || "核心判断", accent);
     addTakeaway(page, slide.takeaway, accent);
     return;
   }
@@ -1007,7 +1005,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   if (slide.metric) {
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
   } else {
-    addMetricCard(page, "关键判断", "01", slide.visual || slide.takeaway || "核心建议", accent);
+    addMetricCard(page, "关键判断", "01", slide.takeaway || "核心建议", accent);
   }
   addTakeaway(page, slide.takeaway, accent);
 }
@@ -1507,7 +1505,7 @@ function renderHeroMetric(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accen
     color: colors.text,
     margin: 0,
   });
-  page.addText(slide.metric?.context || slide.visual || "关键证据", {
+  page.addText(slide.metric?.context || slide.takeaway || "关键证据", {
     x: 7.84,
     y: 3.58,
     w: 3.15,
@@ -2072,7 +2070,6 @@ function fallbackSlideItems(slide: DeckSlide, count: number) {
     ...bodyItems,
     slide.subtitle,
     slide.takeaway,
-    slide.visual,
     slide.metric?.context,
   ]
     .map((item) => normalizeTextValue(item))
@@ -2202,10 +2199,6 @@ function addMetricCard(page: PptxGenJS.Slide, label: string, value: string, cont
     color: colors.muted,
     margin: 0,
   });
-}
-
-function addSideMetric(page: PptxGenJS.Slide, accent: Accent, visual?: string) {
-  addMetricCard(page, "Visual logic", "01", visual || "message-first slide", accent);
 }
 
 function titleOptions(): PptxGenJS.TextPropsOptions {
