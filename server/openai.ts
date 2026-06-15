@@ -168,7 +168,7 @@ export async function createDeckWithAI(input: PresentationRequest): Promise<Deck
 
 export async function createDeckWithOpenAI(input: PresentationRequest): Promise<DeckSpec> {
   if (process.env.MOCK_OPENAI === "1") {
-    return createMockDeck(input);
+    return enforceSourceGrounding(normalizeDeck(createMockDeck(input), input), input);
   }
 
   configureOpenAIProxy();
@@ -183,7 +183,7 @@ export async function createDeckWithOpenAI(input: PresentationRequest): Promise<
 
 export async function createDeckWithAnthropic(input: PresentationRequest): Promise<DeckSpec> {
   if (process.env.MOCK_OPENAI === "1") {
-    return createMockDeck(input);
+    return enforceSourceGrounding(normalizeDeck(createMockDeck(input), input), input);
   }
 
   configureOpenAIProxy();
@@ -270,7 +270,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
           content: buildUserPrompt(input, previousError),
         },
       ],
-      max_output_tokens: getMaxOutputTokens(input.slides),
+      max_output_tokens: getMaxOutputTokens(resolveRequestedSlideCount(input)),
       text: {
         format: {
           type: "json_schema",
@@ -299,7 +299,7 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
     },
     body: JSON.stringify({
       model,
-      max_tokens: getMaxOutputTokens(input.slides),
+      max_tokens: getMaxOutputTokens(resolveRequestedSlideCount(input)),
       temperature: previousError ? 0.2 : 0.4,
       system: buildSystemPrompt(),
       messages: [
@@ -330,7 +330,7 @@ async function refineDeckWithAnthropic(apiKey: string, model: string, input: Pre
     },
     body: JSON.stringify({
       model,
-      max_tokens: getMaxOutputTokens(input.slides),
+      max_tokens: getMaxOutputTokens(resolveRequestedSlideCount(input)),
       temperature: 0.25,
       system: [
         buildSystemPrompt(),
@@ -495,9 +495,9 @@ function stripJsonFence(text: string) {
 }
 
 function buildUserPrompt(input: PresentationRequest, previousError?: string) {
-  const requestedSlides = clampSlideCount(input.slides);
   const visualDirection = pickVisualDirection(input);
   const sourceMaterial = extractUserSourceMaterial(input.prompt);
+  const requestedSlides = resolveRequestedSlideCount(input, sourceMaterial);
   const sourceInstructions = extractUserInstructions(input.prompt);
   const explicitSections = extractExplicitSourceSections(sourceMaterial);
   const sourceUnits = extractSourceOutlineUnits(sourceMaterial, Math.min(16, requestedSlides + 4));
@@ -536,12 +536,15 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...(sourceAnchors.length ? [sourceAnchors.join(", ")] : []),
     "",
     "Requirements:",
-    `- Produce exactly ${requestedSlides} slides.`,
+    `- Produce ${requestedSlides} slides. If source coverage requires it, prioritize covering every source section over keeping the deck short.`,
     "- The source material above is authoritative. Do not replace it with a generic business story, consulting story, AI/SaaS sales story, fundraising story, or unrelated examples.",
     "- Preserve the user's concrete bullets, examples, named tools, names, metrics, and terms. You may rewrite for clarity, but do not omit them unless there is not enough slide space.",
     "- Never output placeholder text such as ????, TBD, TODO, lorem ipsum, or unclear question marks. If information is missing, use a concrete source-backed statement or omit that element.",
     explicitSections.length
       ? `- The source contains ${explicitSections.length} required sections. Create at least one visible slide for every required section, in the same order.`
+      : "",
+    explicitSections.length
+      ? "- A section is not covered just because it appears in an agenda, table of contents, cover, or summary. Each required source section needs its own visible content slide."
       : "",
     explicitSections.length
       ? "- Do not split one source section into multiple detail slides until every required source section already has at least one visible slide."
@@ -691,9 +694,20 @@ function validateSourceCoverage(deck: DeckSpec, input: PresentationRequest) {
   const deckText = normalizeComparableText(collectVisibleDeckText(deck));
   const sections = extractExplicitSourceSections(sourceMaterial).slice(0, 16);
   if (sections.length >= 2) {
-    const missing = sections.filter((section) => !sourceTermCovered(deckText, section.title));
+    const contentSlides = deck.slides.filter(isCoverageContentSlide);
+    const missing = sections.filter((section) => !contentSlides.some((slide) => slideCoversSourceSection(slide, section)));
     if (missing.length) {
-      throw new Error(`Generated deck omitted source sections: ${missing.map((section) => section.title).join(", ")}`);
+      throw new Error(`Generated deck omitted source content slides: ${missing.map((section) => section.title).join(", ")}`);
+    }
+
+    const missingDetails = sections.flatMap((section) =>
+      section.body
+        .slice(0, 8)
+        .filter((line) => !sourceTermCovered(deckText, line))
+        .map((line) => `${section.title} -> ${compactPromptText(line, 72)}`),
+    );
+    if (missingDetails.length) {
+      throw new Error(`Generated deck omitted source details: ${missingDetails.slice(0, 10).join(", ")}`);
     }
     return;
   }
@@ -749,6 +763,33 @@ function collectVisibleDeckText(deck: DeckSpec) {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function visibleSlideText(slide: DeckSpec["slides"][number]) {
+  return [
+    slide.kicker,
+    slide.title,
+    slide.subtitle,
+    ...(slide.body || []),
+    slide.takeaway,
+    slide.metric?.label,
+    slide.metric?.value,
+    slide.metric?.context,
+    slide.chart?.title,
+    ...(slide.chart?.labels || []),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function isCoverageContentSlide(slide: DeckSpec["slides"][number]) {
+  return !["cover", "agenda", "section", "closing"].includes(slide.layout);
+}
+
+function slideCoversSourceSection(slide: DeckSpec["slides"][number], section: ReturnType<typeof extractExplicitSourceSections>[number]) {
+  const slideText = normalizeComparableText(visibleSlideText(slide));
+  if (sourceTermCovered(slideText, section.title)) return true;
+  return section.body.some((line) => sourceTermCovered(slideText, line));
 }
 
 function parseDeckJson(text: string) {
@@ -878,7 +919,7 @@ function escapeControlCharactersInStrings(text: string) {
 }
 
 function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
-  const targetCount = clampSlideCount(input.slides);
+  const targetCount = resolveRequestedSlideCount(input);
   const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, targetCount) : [];
 
   if (input.source !== "ppt" && slides[0] && slides[0].layout !== "cover") {
@@ -920,14 +961,129 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     };
   });
 
+  const groundedSlides = ensureExplicitSectionSlides(enhancedSlides, input, targetCount);
+
   return {
     title: deck.title || fallbackTitle(input, 0),
     subtitle: deck.subtitle || "AI-generated presentation",
     language: deck.language || input.language,
     audience: deck.audience || input.audience,
     theme: normalizeTheme(deck.theme, input),
-    slides: enhancedSlides,
+    slides: groundedSlides,
   };
+}
+
+function ensureExplicitSectionSlides(slides: DeckSpec["slides"], input: PresentationRequest, targetCount: number) {
+  const sections = extractExplicitSourceSections(extractUserSourceMaterial(input.prompt)).slice(0, 16);
+  if (sections.length < 2) return slides;
+
+  const nextSlides = slides.slice();
+  const firstSectionIndex = input.source === "ppt" ? 1 : 2;
+
+  if (input.source !== "ppt") {
+    const prefix = nextSlides.slice(0, firstSectionIndex);
+    const sectionSlides = sections.map((section, sectionIndex) => {
+      const existing = nextSlides.find((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section));
+      return existing
+        ? mergeSectionDetailsIntoSlide({ ...existing, title: section.title }, section)
+        : sourceSectionSlide(section, input, firstSectionIndex + sectionIndex);
+    });
+    const suffix = nextSlides
+      .slice(firstSectionIndex)
+      .filter((slide) => !sections.some((section) => slideCoversSourceSection(slide, section)))
+      .filter((slide) => !["cover", "agenda"].includes(slide.layout));
+    return [...prefix, ...sectionSlides, ...suffix].slice(0, Math.max(targetCount, firstSectionIndex + sections.length));
+  }
+
+  sections.forEach((section, sectionIndex) => {
+    const coveredIndex = nextSlides.findIndex((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section));
+    if (coveredIndex >= 0) {
+      nextSlides[coveredIndex] = mergeSectionDetailsIntoSlide(nextSlides[coveredIndex], section);
+      return;
+    }
+
+    const sectionSlide = sourceSectionSlide(section, input, firstSectionIndex + sectionIndex);
+    const preferredIndex = Math.min(firstSectionIndex + sectionIndex, Math.max(0, nextSlides.length - 1));
+    const replaceIndex = findReplaceableSectionSlot(nextSlides, preferredIndex, sections);
+    if (replaceIndex >= 0) {
+      nextSlides[replaceIndex] = sectionSlide;
+      return;
+    }
+    if (nextSlides.length < Math.max(targetCount, Math.min(30, sections.length + firstSectionIndex))) {
+      nextSlides.push(sectionSlide);
+    }
+  });
+
+  return nextSlides.slice(0, 30);
+}
+
+function mergeSectionDetailsIntoSlide(
+  slide: DeckSpec["slides"][number],
+  section: ReturnType<typeof extractExplicitSourceSections>[number],
+): DeckSpec["slides"][number] {
+  if (!section.body.length) return slide;
+  const slideText = normalizeComparableText(visibleSlideText(slide));
+  const missingDetails = section.body.filter((line) => !sourceTermCovered(slideText, line));
+  if (!missingDetails.length) return slide;
+  const sourceFirstBody = section.body.length >= 3 ? section.body : [...section.body, ...(slide.body || [])];
+  const body = uniqueNonEmpty(sourceFirstBody)
+    .map((item) => compactSourceText(item, 82))
+    .slice(0, 5);
+  const titleText = normalizeComparableText(slide.title || "");
+  const title = sourceTermCovered(titleText, section.title) ? slide.title : section.title;
+  return {
+    ...slide,
+    title,
+    body,
+    takeaway: slide.takeaway || compactSourceText(section.body[0], 92),
+  };
+}
+
+function uniqueNonEmpty(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = cleanGeneratedText(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function sourceSectionSlide(
+  section: ReturnType<typeof extractExplicitSourceSections>[number],
+  input: PresentationRequest,
+  index: number,
+): DeckSpec["slides"][number] {
+  const body = section.body.length
+    ? section.body.slice(0, 5).map((item) => compactSourceText(item, 82))
+    : [section.title];
+  const slide: DeckSpec["slides"][number] = {
+    layout: body.length >= 4 ? "insightGrid" : "content",
+    kicker: `Section ${index}`,
+    title: section.title,
+    body,
+    takeaway: compactSourceText(section.body[0] || section.title, 92),
+  };
+  if (input.source === "ppt") slide.sourceSlides = [index];
+  return slide;
+}
+
+function findReplaceableSectionSlot(
+  slides: DeckSpec["slides"],
+  preferredIndex: number,
+  sections: ReturnType<typeof extractExplicitSourceSections>,
+) {
+  const preferred = slides[preferredIndex];
+  if (preferred && preferred.layout !== "cover" && !sections.some((section) => slideCoversSourceSection(preferred, section))) {
+    return preferredIndex;
+  }
+  for (let index = 0; index < slides.length; index += 1) {
+    const slide = slides[index];
+    if (slide.layout !== "cover" && !sections.some((section) => slideCoversSourceSection(slide, section))) return index;
+  }
+  return -1;
 }
 
 function normalizeSourceSlides(sourceSlides: number[] | undefined, index: number, input: PresentationRequest) {
@@ -1204,6 +1360,24 @@ function clampSlideCount(count: number) {
   return Math.max(4, Math.min(30, Math.round(count)));
 }
 
+function resolveRequestedSlideCount(input: PresentationRequest, sourceMaterial = extractUserSourceMaterial(input.prompt)) {
+  const base = clampSlideCount(input.slides);
+  if (hasExplicitSlideCountInstruction(input.prompt)) return base;
+
+  const sections = extractExplicitSourceSections(sourceMaterial);
+  if (sections.length >= 2) {
+    const structuralSlides = input.source === "ppt" ? 1 : 2;
+    return Math.max(base, Math.min(30, sections.length + structuralSlides));
+  }
+
+  return base;
+}
+
+function hasExplicitSlideCountInstruction(prompt: string) {
+  const text = String(prompt || "");
+  return /(?:生成|做成|输出|控制在|最多|固定|exactly|produce|make|limit).{0,12}\d{1,2}\s*(?:页|張|张|slides?|pages?)/i.test(text);
+}
+
 function fallbackTitle(input: PresentationRequest, index: number) {
   const labels: Record<PresentationRequest["purpose"], string> = {
     fundraising: "融资路演方案",
@@ -1217,7 +1391,7 @@ function fallbackTitle(input: PresentationRequest, index: number) {
 
 function createMockDeck(input: PresentationRequest): DeckSpec {
   const title = fallbackTitle(input, 0);
-  const requestedSlides = clampSlideCount(input.slides);
+  const requestedSlides = resolveRequestedSlideCount(input);
   const baseSlides: DeckSpec["slides"] = [
     {
       layout: "cover",
