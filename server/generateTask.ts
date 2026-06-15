@@ -7,6 +7,7 @@ import { renderHighQualityDeckToPptx } from "./highQualityPptx";
 import { createDeckWithAI } from "./openai";
 import { renderDeckToPptx } from "./pptx";
 import { extractTextFromPptx, type SourceImageAsset } from "./pptxReader";
+import { extractSourceAnchors, extractUserSourceMaterial, normalizeComparableText, sourceTermCovered } from "./sourceGrounding";
 import { saveGeneration } from "./store";
 
 export type GenerationAssets = {
@@ -81,28 +82,15 @@ async function createRenderedDeckWithValidation(input: PresentationRequest, asse
 
 async function validateRenderedSourceAnchors(file: Buffer, input: PresentationRequest) {
   if (input.source !== "ppt") return;
-  const anchors = input.sourceAnchors?.length ? input.sourceAnchors.slice(0, 16) : extractRequiredSourceAnchors(input.prompt);
+  const anchors = input.sourceAnchors?.length ? input.sourceAnchors.slice(0, 24) : extractSourceAnchors(extractUserSourceMaterial(input.prompt), 24);
   if (!anchors.length) return;
 
   const rendered = await extractTextFromPptx(file);
-  const missing = anchors.filter((anchor) => !rendered.text.includes(anchor));
+  const renderedText = normalizeComparableText(rendered.text);
+  const missing = anchors.filter((anchor) => !sourceTermCovered(renderedText, anchor));
   if (missing.length) {
     throw new Error(`Rendered PPT is missing source anchors: ${missing.join(", ")}`);
   }
-}
-
-function extractRequiredSourceAnchors(text: string) {
-  const anchors = new Set<string>();
-  for (const match of text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
-    anchors.add(match[0]);
-  }
-  for (const match of text.matchAll(/\d+\s*(?:天|周|个月|月|年)/g)) {
-    anchors.add(match[0].replace(/\s+/g, " "));
-  }
-  for (const match of text.matchAll(/\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年)/g)) {
-    anchors.add(match[0].replace(/\s+/g, " "));
-  }
-  return Array.from(anchors).slice(0, 16);
 }
 
 export function safeFilename(name: string) {

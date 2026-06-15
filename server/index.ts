@@ -11,6 +11,7 @@ import { extractTextFromPptx } from "./pptxReader";
 import { withUploadedPptxText } from "./queuedGeneration";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
+import { wrapSourceMaterial } from "./sourceGrounding";
 import { getEmailDeliveryMode } from "./email";
 import { toUserFacingError } from "./userErrors";
 import type { PresentationRequest } from "../src/shared/deck";
@@ -337,16 +338,16 @@ async function validateRequest(
 
   if (file && options.extractUploadedPptx !== false) {
     const extracted = await extractTextFromPptx(file.buffer);
-    prompt = [
+    const sourceMaterial = [
       `Uploaded PowerPoint: ${file.originalname}`,
       `Extracted source slide count: ${extracted.slideCount}`,
       extracted.brandColors.length ? `Detected source deck brand colors: ${extracted.brandColors.map((color) => `#${color}`).join(", ")}` : "",
       "Extracted slide text:",
       extracted.text,
-      prompt ? ["Additional user direction:", prompt].join("\n") : "",
     ]
       .filter(Boolean)
       .join("\n\n");
+    prompt = wrapSourceMaterial(sourceMaterial, prompt ? ["Additional user direction:", prompt].join("\n") : "");
   }
 
   if (source === "ppt" && !file && !options.sourceFileProvided && prompt.length < 8) {

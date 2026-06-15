@@ -2,6 +2,7 @@ import type { PresentationRequest } from "../src/shared/deck";
 import { generateAndSaveDeck } from "./generateTask";
 import { readPptxFile } from "./fileStorage";
 import { extractTextFromPptx } from "./pptxReader";
+import { extractSourceAnchors, wrapSourceMaterial } from "./sourceGrounding";
 import { updateGenerationJob } from "./store";
 import { toUserFacingError } from "./userErrors";
 
@@ -56,8 +57,8 @@ export async function runQueuedGeneration(payload: ValidQueuedGenerationPayload)
 export async function withUploadedPptxText(input: PresentationRequest, sourceFile: QueuedSourceFile) {
   const file = await readPptxFile(sourceFile.storedFilename);
   const extracted = await extractTextFromPptx(file);
-  const sourceAnchors = extractSourceAnchors(extracted.text);
-  const prompt = [
+  const sourceAnchors = extractSourceAnchors(extracted.text, 24);
+  const sourceMaterial = [
     `Uploaded PowerPoint: ${sourceFile.originalName}`,
     `Extracted source slide count: ${extracted.slideCount}`,
     `Slides with extractable text: ${extracted.extractableSlideCount}`,
@@ -75,10 +76,10 @@ export async function withUploadedPptxText(input: PresentationRequest, sourceFil
     "",
     "Extracted slide-by-slide source material:",
     extracted.text,
-    input.prompt ? ["Additional user direction:", input.prompt].join("\n") : "",
   ]
     .filter(Boolean)
     .join("\n\n");
+  const prompt = wrapSourceMaterial(sourceMaterial, input.prompt ? ["Additional user direction:", input.prompt].join("\n") : "");
 
   return {
     input: { ...input, prompt, sourceAnchors },
@@ -95,18 +96,4 @@ function summarizeSourceImages(images: Array<{ slideNumber: number; name: string
     .sort((a, b) => a[0] - b[0])
     .map(([slideNumber, count]) => `slide ${slideNumber}: ${count} image${count > 1 ? "s" : ""}`)
     .join("; ");
-}
-
-function extractSourceAnchors(text: string) {
-  const anchors = new Set<string>();
-  for (const match of text.matchAll(/(?:RAG|ROI|RBAC|ABAC|SSO|AD|API|ERP|MES|PLM|CRM|EHS|CIO|CEO|AI)/g)) {
-    anchors.add(match[0]);
-  }
-  for (const match of text.matchAll(/\d+\s*(?:天|周|个月|月|年)/g)) {
-    anchors.add(match[0].replace(/\s+/g, " "));
-  }
-  for (const match of text.matchAll(/\d+\s*[–-]\s*\d+\s*(?:天|周|个月|月|年)/g)) {
-    anchors.add(match[0].replace(/\s+/g, " "));
-  }
-  return Array.from(anchors).slice(0, 16);
 }
