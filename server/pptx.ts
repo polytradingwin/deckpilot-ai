@@ -531,7 +531,11 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
   }
 
   if (slide.layout === "beforeAfter") {
-    renderBeforeAfter(page, slide, accent);
+    if (hasMeaningfulBeforeAfterSlide(slide)) {
+      renderBeforeAfter(page, slide, accent);
+    } else {
+      renderContent(page, { ...slide, layout: "content" }, accent, template);
+    }
     return;
   }
 
@@ -1383,7 +1387,7 @@ function renderTimeline(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent)
 function renderMatrix(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
   const items = (slide.body || ["高价值 / 低复杂", "高价值 / 高复杂", "低价值 / 低复杂", "低价值 / 高复杂"]).slice(0, 4);
-  const labels = ["High impact", "Strategic bet", "Quick win", "Defer"];
+  const labels = ["要点 01", "要点 02", "要点 03", "要点 04"];
 
   items.forEach((item, i) => {
     const x = 0.86 + (i % 2) * 4.72;
@@ -1673,6 +1677,17 @@ function renderBeforeAfter(page: PptxGenJS.Slide, slide: DeckSlide, accent: Acce
   addTakeaway(page, slide.takeaway, accent);
 }
 
+function hasMeaningfulBeforeAfterSlide(slide: DeckSlide) {
+  const items = fallbackSlideItems(slide, 2).map((item) => normalizeComparisonText(item)).filter(Boolean);
+  if (items.length < 2) return false;
+  const [before, after] = items;
+  return before !== after && !before.includes(after) && !after.includes(before);
+}
+
+function normalizeComparisonText(value: string) {
+  return normalizeTextValue(value).replace(/[\s*_`~]/g, "").toLowerCase();
+}
+
 function addBeforeAfterBlock(page: PptxGenJS.Slide, label: string, text: string, x: number, y: number, accent: Accent, highlighted: boolean) {
   page.addText(label, {
     x,
@@ -1701,7 +1716,7 @@ function addBeforeAfterBlock(page: PptxGenJS.Slide, label: string, text: string,
 function renderInsightGrid(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent) {
   page.addText(slide.title, titleOptions());
   const items = fallbackSlideItems(slide, 4);
-  const labels = ["信号", "证据", "风险", "行动"];
+  const labels = ["要点 01", "要点 02", "要点 03", "要点 04"];
 
   items.forEach((item, i) => {
     const x = 0.82 + (i % 2) * 5.1;
@@ -2071,7 +2086,11 @@ function normalizeTextValue(value: unknown): string {
   if (value == null) return "";
   let normalized = "";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    normalized = String(value).replace(/\s+/g, " ").trim();
+    normalized = String(value)
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/__([^_]+)__/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
     return isPlaceholderText(normalized) ? "" : normalized;
   }
   if (Array.isArray(value)) {

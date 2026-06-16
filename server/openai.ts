@@ -560,8 +560,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...sourceSpecificRequirements(input),
     ...structureRequirements(input, explicitSections.length),
     "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
-    "- Use layout plugins when they fit the source: heroMetric for one dominant claim/KPI, process for workflows, caseStudy or beforeAfter for before-after-result stories, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, splitStory for two-sided reasoning, threeCards for 3 pillars, insightGrid for 4 related insights.",
-    "- Content-to-layout rules: numbers/KPIs -> heroMetric/dashboard/chart; steps/process/time -> process/timeline; pros/cons or old/new -> comparison/beforeAfter/splitStory; 3 capabilities/pillars -> threeCards; 4 findings/risks/priorities -> insightGrid/matrix; strong recommendation -> quote/closing.",
+    "- Use layout plugins only when the source naturally supports them: heroMetric for one dominant claim/KPI, process for workflows, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, threeCards for 3 pillars.",
+    "- Do not force a fixed analysis frame such as signal/evidence/risk/action. Use comparison, beforeAfter, splitStory, matrix, or insightGrid only when the source explicitly contains that structure and the slide items are meaningfully different.",
     "- Treat the template as a loose visual direction, not a rigid template. Vary composition, density, scale, image use, and rhythm slide by slide.",
     "- Dashboard cards must be short metric summaries, not pasted raw paragraphs. Keep each dashboard card value under 18 Chinese characters or 8 English words.",
     "- Never put long source sentences into metric.value. Use metric.value only for a number, short status, or compact phrase; move detail into body, takeaway, or speaker notes.",
@@ -599,7 +599,7 @@ function structureRequirements(input: PresentationRequest, explicitSectionCount 
     return [
       "- Preserve the uploaded deck's page order unless the user explicitly asks for a new order.",
       "- Use layouts that fit each original slide's purpose; do not force a cover/agenda/executive-summary pattern if the source deck does not support it.",
-      "- Use richer layout plugins where appropriate: dashboard for KPI-heavy source slides, process for workflow slides, caseStudy or beforeAfter for example/outcome slides, heroMetric for a dominant number or claim, splitStory for two-side reasoning.",
+      "- Use richer layout plugins only where the original slide content supports them: dashboard for KPI-heavy source slides, process for workflow slides, caseStudy for concrete examples/outcomes, heroMetric for a dominant number or claim. Do not force before/after or two-sided reasoning.",
       "- For each output slide, transform the corresponding source content into clearer executive language and better visual hierarchy.",
     ];
   }
@@ -610,7 +610,7 @@ function structureRequirements(input: PresentationRequest, explicitSectionCount 
       : "- Start with a cover slide, then an agenda/narrative map and an executive summary that states the recommendation.",
     explicitSectionCount ? "- For markdown or numbered source sections, preserve the source sequence and make section coverage more important than adding generic synthesis pages." : "",
     "- For decks longer than 8 slides, include section-divider slides that create a boardroom narrative arc.",
-    "- Use a mix of layouts: executiveSummary for synthesis, chart for quantified evidence, dashboard for KPI pages, comparison/beforeAfter for tradeoffs, process for workflows, caseStudy for examples, timeline for rollout, matrix/insightGrid for priorities or risk mapping, threeCards for pillars, quote for decisive recommendations.",
+    "- Use a flexible mix of layouts based on the actual material: content for complete explanation, threeCards for exactly three pillars, process/timeline for ordered steps, chart/dashboard for quantified evidence, caseStudy for examples, quote for decisive recommendations. Use comparison/beforeAfter/matrix/insightGrid only when the source explicitly asks for those structures.",
   ];
 }
 
@@ -1060,7 +1060,7 @@ function sourceSectionSlide(
     ? section.body.slice(0, 5).map((item) => compactSourceText(item, 82))
     : [section.title];
   const slide: DeckSpec["slides"][number] = {
-    layout: body.length >= 4 ? "insightGrid" : "content",
+    layout: body.length === 3 ? "threeCards" : "content",
     kicker: `Section ${index}`,
     title: section.title,
     body,
@@ -1190,18 +1190,26 @@ function improveLayoutForContent(
   const text = [slide.title, slide.subtitle, ...(slide.body || []), slide.takeaway, slide.visual].filter(Boolean).join(" ");
   const hasNumber = /[\d０-９]+(?:[,.，]\d+)*(?:%|％|倍|x|X|万|亿|人|天|周|月|年|元|美元|条|次|家|页)?/.test(text);
   const hasProcess = /(流程|步骤|路径|阶段|计划|推进|落地|执行|上线|timeline|roadmap|phase|step|process)/i.test(text);
-  const hasComparison = /(对比|相比|差异|权衡|取舍|before|after|versus|vs\.?|竞品|优劣|利弊|旧|新)/i.test(text);
+  const hasComparison = /(对比|相比|差异|权衡|取舍|versus|vs\.?|竞品|优劣|利弊)/i.test(text);
+  const hasExplicitBeforeAfter = /(之前|之后|前后|优化前|优化后|改版前|改版后|before\s*\/?\s*after|from .+ to |现状.+目标|当前.+未来)/i.test(text);
   const hasCase = /(案例|客户|结果|成效|转化|复盘|story|case|result|outcome)/i.test(text);
   const itemCount = slide.body?.length || 0;
 
-  if (hasComparison && hasCase) return "beforeAfter";
-  if (hasComparison) return "splitStory";
+  if (hasExplicitBeforeAfter && hasCase && hasDistinctBodyItems(slide.body, 2)) return "beforeAfter";
+  if (hasComparison && hasDistinctBodyItems(slide.body, 2)) return "comparison";
   if (hasProcess) return "process";
   if (hasNumber && itemCount >= 3) return "dashboard";
   if (hasNumber) return "heroMetric";
   if (itemCount === 3) return "threeCards";
-  if (itemCount >= 4) return "insightGrid";
   return slide.layout;
+}
+
+function hasDistinctBodyItems(body: unknown, count: number) {
+  if (!Array.isArray(body)) return false;
+  const items = body.map((item) => cleanGeneratedText(item).replace(/\s+/g, "").toLowerCase()).filter(Boolean);
+  if (items.length < count) return false;
+  const first = items[0];
+  return items.slice(1, count).every((item) => item !== first && !item.includes(first) && !first.includes(item));
 }
 
 function normalizeSlideBody(body: unknown) {
@@ -1318,14 +1326,11 @@ function fallbackLayout(index: number, total: number): DeckSpec["slides"][number
   if (index === 1) return "agenda";
   if (index === total - 1) return "closing";
   if (index === 2) return "executiveSummary";
-  if (index % 11 === 0) return "beforeAfter";
-  if (index % 10 === 0) return "splitStory";
   if (index % 9 === 0) return "caseStudy";
   if (index % 8 === 0) return "quote";
   if (index % 7 === 0) return "timeline";
   if (index % 6 === 0) return "dashboard";
-  if (index % 5 === 0) return "matrix";
-  if (index % 4 === 0) return "chart";
+  if (index % 5 === 0) return "chart";
   if (index % 3 === 0) return "process";
   if (index % 2 === 0) return "threeCards";
   return "content";

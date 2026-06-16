@@ -10,6 +10,7 @@ import {
   FileText,
   FileUp,
   Languages,
+  LoaderCircle,
   Lock,
   LogIn,
   Mail,
@@ -247,7 +248,7 @@ const localizedContent = {
       formatNote: "无论原始文件尺寸如何，输出统一为标准 16:9 宽屏格式。",
       promptLabel: "粘贴文稿、脚本或大纲",
       next: "下一步",
-      previous: "上一步",
+      previous: "返回",
       back: "返回",
       liveAudience: "现场听众",
       readingAudience: "阅读对象",
@@ -506,7 +507,7 @@ const localizedContent = {
       formatNote: "Regardless of the original file size, the output is standardized to 16:9 widescreen.",
       promptLabel: "Paste a script, draft, or outline",
       next: "Next",
-      previous: "Previous",
+      previous: "Back",
       back: "Back",
       liveAudience: "Live audience",
       readingAudience: "Readers",
@@ -1335,7 +1336,7 @@ function App() {
                   </button>
                   <button className="primary-button" type="button" onClick={handleGenerate} data-generate-button="true">
                     {isGenerating ? ui.generating : generated ? ui.regenerating : ui.generate}
-                    <Sparkles size={18} />
+                    {isGenerating ? <LoaderCircle className="spin-icon" size={18} /> : <Sparkles size={18} />}
                   </button>
                 </div>
 
