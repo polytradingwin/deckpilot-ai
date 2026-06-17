@@ -2012,7 +2012,7 @@ function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent
     fill: { color: colors.panel2, transparency: 7 },
     line: { color: colors.line, transparency: 16 },
   });
-  page.addText(slide.chart?.title || "Operating signal", {
+  page.addText(slide.chart?.title || "关键数据", {
     x: 8.05,
     y: 2.32,
     w: 2.7,
@@ -2051,16 +2051,26 @@ function renderDashboard(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent
 
 function buildDashboardCards(slide: DeckSlide) {
   const body = fallbackSlideItems(slide, 4);
-  const cards = [
-    { label: slide.metric?.label || "核心信号", value: slide.metric?.value || body[0] || "01" },
-    { label: "关键进展", value: body[1] || "持续推进" },
-    { label: "主要约束", value: body[2] || "待验证风险" },
-    { label: "下一步", value: body[3] || "明确责任" },
-  ];
+  const cards = body.map((item, index) => splitDashboardItem(item, index));
+  if (slide.metric?.label || slide.metric?.value) {
+    cards.unshift({
+      label: slide.metric?.label || "核心指标",
+      value: slide.metric?.value || body[0] || "01",
+    });
+  }
   return cards.map((card) => ({
     label: compactText(card.label, 18),
     value: compactText(card.value, 52),
-  }));
+  })).slice(0, 4);
+}
+
+function splitDashboardItem(item: string, index: number) {
+  const text = normalizeTextValue(item);
+  const match = text.match(/^(.{2,18}?)[：:]\s*(.+)$/);
+  if (match) {
+    return { label: match[1], value: match[2] };
+  }
+  return { label: `要点 ${String(index + 1).padStart(2, "0")}`, value: text };
 }
 
 function fallbackSlideItems(slide: DeckSlide, count: number) {

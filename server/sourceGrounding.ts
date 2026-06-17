@@ -59,15 +59,31 @@ export function extractExplicitSourceSections(text: string): SourceSection[] {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    const heading = line.match(/^\s*#{1,3}\s*(?:\d+[.、]\s*)?(.+?)\s*$/);
-    const numbered = line.match(/^\s*(?:第[一二三四五六七八九十\d]+[章节部分]|[一二三四五六七八九十\d]+[.、])\s*(.+?)\s*$/);
-    if (heading || numbered) {
-      current = { title: (heading?.[1] || numbered?.[1] || "").trim(), body: [] };
+    if (!line || /^-{3,}$/.test(line)) continue;
+
+    const heading = line.match(/^\s*(#{1,6})\s*(.+?)\s*$/);
+    if (heading) {
+      const level = heading[1].length;
+      const title = stripSectionPrefix(heading[2]);
+      if (level <= 2) {
+        current = { title, body: [] };
+        if (current.title) sections.push(current);
+      } else if (current && title && !isStructuralLabel(title)) {
+        current.body.push(title);
+      }
+      continue;
+    }
+
+    const majorNumbered = line.match(/^\s*(?:第[一二三四五六七八九十\d]+[章节部分]|[一二三四五六七八九十]+[.、])\s*(.+?)\s*$/);
+    const arabicNumbered = line.match(/^\s*\d+[.、]\s*(.+?)\s*$/);
+    if (majorNumbered || (arabicNumbered && !current)) {
+      current = { title: stripSectionPrefix(majorNumbered?.[1] || arabicNumbered?.[1] || ""), body: [] };
       if (current.title) sections.push(current);
       continue;
     }
     if (current && line) {
-      current.body.push(stripBullet(line));
+      const bodyLine = stripBullet(line);
+      if (bodyLine && !isStructuralLabel(bodyLine)) current.body.push(bodyLine);
     }
   }
 
@@ -133,11 +149,28 @@ export function sourceTermCovered(deckText: string, term: string) {
   if (!normalized) return true;
   if (deckText.includes(normalized)) return true;
   const simplified = normalized.replace(/什么是|入门|基础|概述|介绍|定义|核心|关键|主要|的/g, "");
-  return simplified.length >= 2 && deckText.includes(simplified);
+  if (simplified.length >= 2 && deckText.includes(simplified)) return true;
+
+  if (normalized.length >= 12) {
+    const facts = Array.from(new Set([
+      ...String(term || "").match(/\d+(?:[,.，]\d+)*(?:\.\d+)?\s*(?:%|％|倍|x|X|万|亿|人|天|周|个月|月|年|元|美元|条|次|家|页|MB|GB|分钟|小时|万元|亿元)?/g) || [],
+      ...extractMeaningfulTerms(term).slice(0, 4),
+    ].map(normalizeComparableText).filter((item) => item.length >= 2)));
+    if (facts.length >= 2) {
+      const covered = facts.filter((fact) => deckText.includes(fact)).length;
+      return covered >= Math.max(2, Math.ceil(facts.length * 0.6));
+    }
+  }
+
+  return false;
 }
 
 export function compactSourceText(value: string, maxLength: number) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  const normalized = String(value || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
 }
 
@@ -161,7 +194,26 @@ function extractMeaningfulTerms(text: string) {
 }
 
 function stripBullet(line: string) {
-  return line.replace(/^\s*[-*•●◦]\s*/, "").replace(/^\s*\d+[.、]\s*/, "").trim();
+  return line
+    .replace(/^\s*[-*•●◦]\s*/, "")
+    .replace(/^\s*\d+[.、]\s*/, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .trim();
+}
+
+function stripSectionPrefix(line: string) {
+  return stripBullet(line)
+    .replace(/^\s*(?:第[一二三四五六七八九十\d]+[章节部分]|[一二三四五六七八九十\d]+[.、])\s*/, "")
+    .trim();
+}
+
+function isStructuralLabel(line: string) {
+  const text = String(line || "").trim();
+  const bare = text.replace(/[：:]\s*$/, "").trim();
+  if (/^(原则|理由|建议总预算|预算总览|合计|目标|指标|说明|备注)$/i.test(bare)) return true;
+  if (!/[：:]$/.test(text)) return false;
+  return bare.length > 0 && bare.length <= 8 && !/\d/.test(bare);
 }
 
 function meaningfulLength(text: string) {

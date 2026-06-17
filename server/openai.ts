@@ -148,6 +148,26 @@ type AnthropicResponse = {
   }>;
 };
 
+const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 180000);
+
+async function fetchWithTimeout(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`AI provider request timed out after ${Math.round(AI_REQUEST_TIMEOUT_MS / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function getAIProvider() {
   return (process.env.AI_PROVIDER || "openai").toLowerCase();
 }
@@ -204,7 +224,7 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
       }
       const draftDeck = normalizeDeck(parseDeckJson(text), input);
       const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck);
-      const deck = enforceSourceGrounding(normalizeDeck(refinedDeck || draftDeck, input), input);
+      const deck = normalizeDeck(refinedDeck || draftDeck, input);
       validateSourceAnchors(deck, input);
       validateSourceCoverage(deck, input);
       return deck;
@@ -229,7 +249,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
         if (!text) {
           throw new Error("OpenAI did not return a structured deck.");
         }
-        const deck = enforceSourceGrounding(normalizeDeck(parseDeckJson(text), input), input);
+        const deck = normalizeDeck(parseDeckJson(text), input);
         validateSourceAnchors(deck, input);
         validateSourceCoverage(deck, input);
         return deck;
@@ -250,7 +270,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
 }
 
 async function createResponse(apiKey: string, model: string, input: PresentationRequest, previousError?: string): Promise<OpenAIResponse> {
-  const response = await fetch(`${process.env.OPENAI_BASE_URL || "https://api.openai.com"}/v1/responses`, {
+  const response = await fetchWithTimeout(`${process.env.OPENAI_BASE_URL || "https://api.openai.com"}/v1/responses`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -290,7 +310,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
 }
 
 async function createAnthropicMessage(apiKey: string, model: string, input: PresentationRequest, previousError?: string) {
-  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+  const response = await fetchWithTimeout(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -321,7 +341,7 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
 async function refineDeckWithAnthropic(apiKey: string, model: string, input: PresentationRequest, draftDeck: DeckSpec) {
   if (process.env.CLAUDE_REFINEMENT === "0") return null;
 
-  const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
+  const response = await fetchWithTimeout(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -920,14 +940,10 @@ function escapeControlCharactersInStrings(text: string) {
 
 function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   const targetCount = resolveRequestedSlideCount(input);
-  const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, targetCount) : [];
+  const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, Math.min(30, Math.max(targetCount, deck.slides.length))) : [];
 
   if (input.source !== "ppt" && slides[0] && slides[0].layout !== "cover") {
     slides[0] = { ...slides[0], layout: "cover" };
-  }
-
-  if (input.source !== "ppt" && targetCount >= 5 && slides[1] && !["agenda", "executiveSummary"].includes(slides[1].layout)) {
-    slides[1] = { ...slides[1], layout: "agenda" };
   }
 
   while (slides.length < targetCount) {
@@ -979,42 +995,17 @@ function ensureExplicitSectionSlides(slides: DeckSpec["slides"], input: Presenta
 
   const nextSlides = slides.slice();
   const firstSectionIndex = input.source === "ppt" ? 1 : 2;
+  const missingSections = sections.filter((section) => !nextSlides.some((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section)));
+  if (!missingSections.length) return nextSlides.slice(0, 30);
 
-  if (input.source !== "ppt") {
-    const prefix = nextSlides.slice(0, firstSectionIndex);
-    const sectionSlides = sections.map((section, sectionIndex) => {
-      const existing = nextSlides.find((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section));
-      return existing
-        ? mergeSectionDetailsIntoSlide({ ...existing, title: section.title }, section)
-        : sourceSectionSlide(section, input, firstSectionIndex + sectionIndex);
-    });
-    const suffix = nextSlides
-      .slice(firstSectionIndex)
-      .filter((slide) => !sections.some((section) => slideCoversSourceSection(slide, section)))
-      .filter((slide) => !["cover", "agenda"].includes(slide.layout));
-    return [...prefix, ...sectionSlides, ...suffix].slice(0, Math.max(targetCount, firstSectionIndex + sections.length));
-  }
-
-  sections.forEach((section, sectionIndex) => {
-    const coveredIndex = nextSlides.findIndex((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section));
-    if (coveredIndex >= 0) {
-      nextSlides[coveredIndex] = mergeSectionDetailsIntoSlide(nextSlides[coveredIndex], section);
-      return;
-    }
-
-    const sectionSlide = sourceSectionSlide(section, input, firstSectionIndex + sectionIndex);
-    const preferredIndex = Math.min(firstSectionIndex + sectionIndex, Math.max(0, nextSlides.length - 1));
-    const replaceIndex = findReplaceableSectionSlot(nextSlides, preferredIndex, sections);
-    if (replaceIndex >= 0) {
-      nextSlides[replaceIndex] = sectionSlide;
-      return;
-    }
-    if (nextSlides.length < Math.max(targetCount, Math.min(30, sections.length + firstSectionIndex))) {
-      nextSlides.push(sectionSlide);
-    }
-  });
-
-  return nextSlides.slice(0, 30);
+  const closingIndex = nextSlides.findIndex((slide, index) => index > firstSectionIndex && slide.layout === "closing");
+  const insertIndex = closingIndex >= 0 ? closingIndex : nextSlides.length;
+  const additions = missingSections.map((section, sectionIndex) => sourceSectionSlide(section, input, firstSectionIndex + sectionIndex));
+  return [
+    ...nextSlides.slice(0, insertIndex),
+    ...additions,
+    ...nextSlides.slice(insertIndex),
+  ].slice(0, 30);
 }
 
 function mergeSectionDetailsIntoSlide(
@@ -1034,7 +1025,7 @@ function mergeSectionDetailsIntoSlide(
   return {
     ...slide,
     title,
-    body,
+    body: body.slice(0, 8),
     takeaway: slide.takeaway || compactSourceText(section.body[0], 92),
   };
 }
@@ -1057,11 +1048,11 @@ function sourceSectionSlide(
   index: number,
 ): DeckSpec["slides"][number] {
   const body = section.body.length
-    ? section.body.slice(0, 5).map((item) => compactSourceText(item, 82))
+    ? section.body.slice(0, 8).map((item) => compactSourceText(item, 96))
     : [section.title];
   const slide: DeckSpec["slides"][number] = {
     layout: body.length === 3 ? "threeCards" : "content",
-    kicker: `Section ${index}`,
+    kicker: `第 ${Math.max(1, index - 1)} 部分`,
     title: section.title,
     body,
     takeaway: compactSourceText(section.body[0] || section.title, 92),
@@ -1246,7 +1237,11 @@ function normalizeMetric(metric: DeckSpec["slides"][number]["metric"]) {
 }
 
 function cleanGeneratedText(value: unknown) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  const normalized = String(value || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!normalized) return "";
   if (isPlaceholderText(normalized)) return "";
   return normalized;
@@ -1371,8 +1366,8 @@ function resolveRequestedSlideCount(input: PresentationRequest, sourceMaterial =
 
   const sections = extractExplicitSourceSections(sourceMaterial);
   if (sections.length >= 2) {
-    const structuralSlides = input.source === "ppt" ? 1 : 2;
-    return Math.max(base, Math.min(30, sections.length + structuralSlides));
+    const structuralSlides = input.source === "ppt" ? 1 : 4;
+    return Math.max(4, Math.min(30, sections.length + structuralSlides));
   }
 
   return base;
