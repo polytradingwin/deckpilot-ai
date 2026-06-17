@@ -870,7 +870,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
       w: 8.6,
       fontSize: template === "academicPaper" ? 24 : 27,
     });
-    const items = (slide.body || ["核心判断", "关键证据", "建议动作", "预期影响"]).slice(0, 4);
+    const items = sanitizeSlideItems(slide.body).slice(0, 4);
     items.forEach((item, i) => {
       const y = 2.22 + i * 0.78;
       page.addText(String(i + 1).padStart(2, "0"), {
@@ -954,7 +954,7 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
   }
 
   page.addText(slide.title, titleOptions());
-  const items = (slide.body || ["关键判断", "推荐动作", "预期影响"]).slice(0, 4);
+  const items = sanitizeSlideItems(slide.body).slice(0, 4);
 
   items.forEach((item, i) => {
     const x = 0.82 + (i % 2) * 4.15;
@@ -992,8 +992,6 @@ function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent:
 
   if (slide.metric) {
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
-  } else {
-    addMetricCard(page, "关键判断", "01", slide.takeaway || "核心建议", accent);
   }
   addTakeaway(page, slide.takeaway, accent);
 }
@@ -2083,8 +2081,7 @@ function fallbackSlideItems(slide: DeckSlide, count: number) {
   ]
     .map((item) => normalizeTextValue(item))
     .filter(Boolean);
-  const defaults = ["核心要点", "关键说明", "应用示例", "限制与挑战", "下一步思考"];
-  return [...sourceItems, ...defaults].slice(0, count);
+  return sourceItems.slice(0, count);
 }
 
 function compactText(value: string, maxLength: number) {
@@ -2128,6 +2125,11 @@ function normalizeTextValue(value: unknown): string {
   return isPlaceholderText(normalized) ? "" : normalized;
 }
 
+function sanitizeSlideItems(items: unknown): string[] {
+  const values = Array.isArray(items) ? items : [items];
+  return values.map((item) => normalizeTextValue(item)).filter(Boolean);
+}
+
 function isPlaceholderText(value: string) {
   const text = String(value || "").trim();
   if (!text) return true;
@@ -2139,7 +2141,7 @@ function isPlaceholderText(value: string) {
 
 function addBulletPanel(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent) {
   const cleanedItems = items.map((item) => normalizeTextValue(item)).filter(Boolean);
-  const rows = cleanedItems.length ? cleanedItems.slice(0, 5) : ["核心观点", "支撑证据", "下一步行动"];
+  const rows = cleanedItems.slice(0, 5);
   rows.forEach((item, i) => {
     const top = y + i * 0.58;
     const fontSize = denseTextFontSize(item, 15);

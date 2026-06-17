@@ -145,8 +145,12 @@ type AnthropicResponse = {
   content?: Array<{
     type?: string;
     text?: string;
+    name?: string;
+    input?: unknown;
   }>;
 };
+
+const ANTHROPIC_DECK_TOOL = "return_deck_spec";
 
 const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 180000);
 
@@ -215,22 +219,27 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
 
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
   const errors: string[] = [];
+  let useTools = process.env.ANTHROPIC_TOOLS !== "0";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const response = await createAnthropicMessage(apiKey, model, input, errors[errors.length - 1]);
-      const text = extractAnthropicText(response);
-      if (!text) {
+      const response = await createAnthropicMessage(apiKey, model, input, errors[errors.length - 1], useTools);
+      const deckPayload = extractAnthropicDeck(response);
+      if (!deckPayload) {
         throw new Error("Anthropic did not return a structured deck.");
       }
-      const draftDeck = normalizeDeck(parseDeckJson(text), input);
-      const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck);
-      const deck = repairSourceDetailCoverage(normalizeDeck(refinedDeck || draftDeck, input), input);
+      const draftDeck = postProcessGeneratedDeck(normalizeDeck(deckPayload, input), input);
+      const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck, useTools);
+      const deck = postProcessGeneratedDeck(normalizeDeck(refinedDeck || draftDeck, input), input);
       validateSourceAnchors(deck, input);
       validateSourceCoverage(deck, input);
       return deck;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(message);
+      if (useTools && message.includes("Request not allowed")) {
+        useTools = false;
+        continue;
+      }
       if (message.includes("ANTHROPIC_API_KEY") || message.includes("API key")) break;
     }
   }
@@ -249,7 +258,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
         if (!text) {
           throw new Error("OpenAI did not return a structured deck.");
         }
-        const deck = repairSourceDetailCoverage(normalizeDeck(parseDeckJson(text), input), input);
+        const deck = postProcessGeneratedDeck(normalizeDeck(parseDeckJson(text), input), input);
         validateSourceAnchors(deck, input);
         validateSourceCoverage(deck, input);
         return deck;
@@ -309,7 +318,7 @@ async function createResponse(apiKey: string, model: string, input: Presentation
   return (await response.json()) as OpenAIResponse;
 }
 
-async function createAnthropicMessage(apiKey: string, model: string, input: PresentationRequest, previousError?: string) {
+async function createAnthropicMessage(apiKey: string, model: string, input: PresentationRequest, previousError?: string, useTools = true) {
   const response = await fetchWithTimeout(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
     method: "POST",
     headers: {
@@ -322,10 +331,24 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
       max_tokens: getMaxOutputTokens(resolveRequestedSlideCount(input)),
       temperature: previousError ? 0.2 : 0.4,
       system: buildSystemPrompt(),
+      ...(useTools
+        ? {
+            tools: [
+              {
+                name: ANTHROPIC_DECK_TOOL,
+                description: "Return the complete DeckEvo editable PowerPoint deck specification.",
+                input_schema: deckSchema,
+              },
+            ],
+            tool_choice: { type: "tool", name: ANTHROPIC_DECK_TOOL },
+          }
+        : {}),
       messages: [
         {
           role: "user",
-          content: `${buildUserPrompt(input, previousError)}\n\nReturn only JSON. Do not wrap it in markdown.`,
+          content: useTools
+            ? `${buildUserPrompt(input, previousError)}\n\nUse the ${ANTHROPIC_DECK_TOOL} tool to return the deck specification.`
+            : `${buildUserPrompt(input, previousError)}\n\nReturn only JSON. Do not wrap it in markdown.`,
         },
       ],
     }),
@@ -338,7 +361,7 @@ async function createAnthropicMessage(apiKey: string, model: string, input: Pres
   return (await response.json()) as AnthropicResponse;
 }
 
-async function refineDeckWithAnthropic(apiKey: string, model: string, input: PresentationRequest, draftDeck: DeckSpec) {
+async function refineDeckWithAnthropic(apiKey: string, model: string, input: PresentationRequest, draftDeck: DeckSpec, useTools = true) {
   if (process.env.CLAUDE_REFINEMENT === "0") return null;
 
   const response = await fetchWithTimeout(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
@@ -359,10 +382,22 @@ async function refineDeckWithAnthropic(apiKey: string, model: string, input: Pre
         "Review for content logic, visual hierarchy, slide-to-slide rhythm, image placement intent, and editable PowerPoint feasibility.",
         "Avoid fixed template thinking. Keep the rendering schema, but make every slide feel specifically designed for the source material.",
       ].join("\n"),
+      ...(useTools
+        ? {
+            tools: [
+              {
+                name: ANTHROPIC_DECK_TOOL,
+                description: "Return the improved complete DeckEvo editable PowerPoint deck specification.",
+                input_schema: deckSchema,
+              },
+            ],
+            tool_choice: { type: "tool", name: ANTHROPIC_DECK_TOOL },
+          }
+        : {}),
       messages: [
         {
           role: "user",
-          content: buildClaudeRefinementPrompt(input, draftDeck),
+          content: buildClaudeRefinementPrompt(input, draftDeck, useTools),
         },
       ],
     }),
@@ -373,59 +408,48 @@ async function refineDeckWithAnthropic(apiKey: string, model: string, input: Pre
     return null;
   }
 
-  const text = extractAnthropicText((await response.json()) as AnthropicResponse);
-  if (!text) return null;
-  return parseDeckJson(text);
+  return extractAnthropicDeck((await response.json()) as AnthropicResponse);
 }
 
-function buildClaudeRefinementPrompt(input: PresentationRequest, draftDeck: DeckSpec) {
+function buildClaudeRefinementPrompt(input: PresentationRequest, draftDeck: DeckSpec, useTools = true) {
   return [
-    "Improve this draft deck JSON. Return only the complete improved JSON object, with the same schema.",
+    useTools
+      ? `Improve this draft deck. Use the ${ANTHROPIC_DECK_TOOL} tool to return the complete improved deck object.`
+      : "Improve this draft deck JSON. Return only the complete improved JSON object, with the same schema.",
     "",
     "Source material summary:",
     compactPromptText(extractUserSourceMaterial(input.prompt), 14000),
     "",
     "Hidden review criteria:",
     "- Preserve the user's facts, entities, sequence, and conclusions.",
+    "- Check coverage against the source line by line. If any meaningful section, metric, example, named channel, or conclusion is missing, add or adjust slides before returning.",
     "- Improve slide titles into sharp message sentences.",
     "- Make layouts less repetitive and more content-specific.",
     "- Make the deck feel layered: strong statement pages, evidence pages, visual explanation pages, and decision pages.",
+    "- Remove generic consulting frames unless the source actually calls for them. Do not create signal/evidence/risk/action or before/after pages by habit.",
     "- Use sourceSlides consistently for uploaded PPT redesigns.",
     "- Keep text short enough for editable PPT text boxes.",
     "- For images/screenshots, keep visual directions clear and reserve room for source assets.",
     "- Do not add any user-facing Claude explanation or review notes.",
     "",
-    "Draft JSON:",
+    "Draft deck object:",
     JSON.stringify(draftDeck),
     "",
-    "Return only JSON. No markdown.",
+    useTools ? "Do not write a critique. Return the improved deck through the tool call." : "Return only JSON. No markdown.",
   ].join("\n");
 }
 
 function buildSystemPrompt() {
-  if (process.env.DECKPILOT_LONG_WORKER !== "1") {
-    return [
-      "You are a senior presentation strategist, executive editor, and visual information designer.",
-      "Create concise, business-ready PowerPoint decks with strong narrative structure, visual hierarchy, and clear decision value.",
-      "Return only valid JSON that matches the supplied schema.",
-      "Keep slide text short enough to fit a polished presentation. Prefer clear claims over vague slogans.",
-      "Choose a visual template that fits the user's material instead of reusing the same look for every deck.",
-      "Do not behave like a fixed-template deck generator. Art-direct each slide from the user's content and choose a layout rhythm that fits the page purpose.",
-      "Quality bar: every slide must have one dominant message, a reason to exist, and a visual structure that makes the message easier to understand.",
-    ].join("\n");
-  }
-
   return [
-    "You are a senior McKinsey-level presentation strategist, executive storyteller, and visual information designer.",
-    "Build board-ready PowerPoint decks with a clear storyline, MECE structure, crisp slide titles, evidence-first claims, and executive-level language.",
-    "Every slide title must be a message sentence, not a topic label.",
-    "A strong deck should feel like a finished consultant/business presentation, not a generic AI outline.",
-    "Select a distinct visual template based on the content, audience, and style request. Do not default to the same template every time.",
-    "Do not force a standard cover-agenda-summary pattern when redesigning an uploaded deck. Preserve the source deck's intent and art-direct every slide independently.",
-    "Use a narrative spine: situation, complication, insight, recommendation, proof, rollout, risks, decision.",
-    "Apply design taste: restrained typography, high contrast, strong spacing, compact labels, no text dumping, no decorative clutter.",
-    "Use the user's material faithfully. When data is missing, mark assumptions as plausible placeholders instead of inventing false facts.",
-    "Design for editable PowerPoint: short text, strong hierarchy, one key message per slide, and layouts that can be rendered as shapes, text, and simple charts.",
+    "You are Claude acting as a top-tier presentation creator inside a polished slide-making app.",
+    "Your job is to transform the user's exact source material into a finished, editable PowerPoint deck plan.",
+    "Behave like a human senior presentation strategist plus art director, not like a fixed-template generator.",
+    "The source material is the contract: preserve every important section, example, number, named item, and conclusion. You may rewrite, group, and elevate it, but you must not replace it with unrelated business frameworks.",
+    "Build the deck the way the Claude desktop app would: first understand the source, then choose the slide count and narrative rhythm needed to cover it completely, then art-direct each slide individually.",
+    "Every slide title must be a message sentence or a sharp section promise, not a vague label.",
+    "Use flexible composition: KPI summary, budget split, channel deep dive, comparison, timeline, process, case evidence, quote, or closing only when the source naturally calls for it.",
+    "Never force generic frameworks such as signal/evidence/risk/action, before/after, agenda, executive summary, or dashboard pages unless the source explicitly needs that structure.",
+    "Design for editable PowerPoint: all important content must be real slide text, not image-only text; keep each text box short enough to fit cleanly.",
     "Return only valid JSON matching the supplied deck structure. No markdown, no prose outside JSON.",
   ].join("\n");
 }
@@ -506,6 +530,17 @@ function extractAnthropicText(response: AnthropicResponse) {
     .trim();
 }
 
+function extractAnthropicDeck(response: AnthropicResponse): DeckSpec | null {
+  const toolUse = response.content?.find((item) => item.type === "tool_use" && item.name === ANTHROPIC_DECK_TOOL);
+  if (toolUse?.input && typeof toolUse.input === "object") {
+    return toolUse.input as DeckSpec;
+  }
+
+  const text = extractAnthropicText(response);
+  if (!text) return null;
+  return parseDeckJson(text);
+}
+
 function stripJsonFence(text: string) {
   return text
     .trim()
@@ -556,9 +591,10 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...(sourceAnchors.length ? [sourceAnchors.join(", ")] : []),
     "",
     "Requirements:",
-    `- Produce ${requestedSlides} slides. If source coverage requires it, prioritize covering every source section over keeping the deck short.`,
+    `- Aim for about ${requestedSlides} slides, but if source coverage requires it, use more slides up to 30 rather than omitting source content.`,
+    "- Think like the Claude desktop app generating a polished PPT from this prompt: preserve the source, choose a fitting story arc, and vary page composition naturally.",
     "- The source material above is authoritative. Do not replace it with a generic business story, consulting story, AI/SaaS sales story, fundraising story, or unrelated examples.",
-    "- Preserve the user's concrete bullets, examples, named tools, names, metrics, and terms. You may rewrite for clarity, but do not omit them unless there is not enough slide space.",
+    "- Preserve the user's concrete bullets, examples, named tools, names, metrics, and terms. You may rewrite for clarity, but do not omit them. If needed, add another slide.",
     "- Never output placeholder text such as ????, TBD, TODO, lorem ipsum, or unclear question marks. If information is missing, use a concrete source-backed statement or omit that element.",
     explicitSections.length
       ? `- The source contains ${explicitSections.length} required sections. Create at least one visible slide for every required section, in the same order.`
@@ -572,6 +608,9 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     explicitSections.length
       ? "- Recommended allocation: cover, concise narrative map, one slide per required source section, then synthesis/closing only if slides remain."
       : "",
+    explicitSections.length
+      ? "- If a required section contains clear subtopics, numbered items, channel names, examples, or cost breakdown items, split those into dedicated slides when that is the natural way to preserve detail."
+      : "",
     !explicitSections.length && sourceUnits.length
       ? "- For paragraph or bullet source material, preserve the detected source content units. Do not replace them with a generic deck narrative."
       : "",
@@ -579,13 +618,13 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...explicitSections.map((section) => `- Required section to cover explicitly: ${section.title}`),
     ...sourceSpecificRequirements(input),
     ...structureRequirements(input, explicitSections.length),
-    "- Use chart layout when useful, with plausible placeholder data only when exact numbers are absent; label assumptions clearly in speaker notes.",
-    "- Use layout plugins only when the source naturally supports them: heroMetric for one dominant claim/KPI, process for workflows, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, threeCards for 3 pillars.",
+    "- Use chart layout only when the source gives real numbers. Do not invent chart data when exact numbers are absent.",
+    "- Use layout plugins only when the source naturally supports them: heroMetric for one dominant claim/KPI, process for workflows, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, threeCards for exactly 3 pillars.",
     "- Do not force a fixed analysis frame such as signal/evidence/risk/action. Use comparison, beforeAfter, splitStory, matrix, or insightGrid only when the source explicitly contains that structure and the slide items are meaningfully different.",
     "- Treat the template as a loose visual direction, not a rigid template. Vary composition, density, scale, image use, and rhythm slide by slide.",
     "- Dashboard cards must be short metric summaries, not pasted raw paragraphs. Keep each dashboard card value under 18 Chinese characters or 8 English words.",
     "- Never put long source sentences into metric.value. Use metric.value only for a number, short status, or compact phrase; move detail into body, takeaway, or speaker notes.",
-    "- Avoid using content layout repeatedly. A premium deck should alternate large-message pages, dense evidence pages, and structured explanation pages.",
+    "- Avoid using the same layout repeatedly. A premium deck should alternate large-message pages, dense evidence pages, structured explanation pages, and synthesis pages according to the material.",
     "- Do not overfill boxes. If a sentence is long, rewrite it into a short claim and put context in speakerNotes.",
     "- Avoid generic titles like Overview, Problem, Solution, Market, Next Steps. Use full-sentence conclusions.",
     "- Each slide body should have 2 to 5 concise bullets.",
@@ -940,7 +979,7 @@ function escapeControlCharactersInStrings(text: string) {
 
 function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   const targetCount = resolveRequestedSlideCount(input);
-  const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, Math.min(30, Math.max(targetCount, deck.slides.length))) : [];
+  const slides = Array.isArray(deck.slides) ? deck.slides.slice(0, 30) : [];
 
   if (input.source !== "ppt" && slides[0] && slides[0].layout !== "cover") {
     slides[0] = { ...slides[0], layout: "cover" };
@@ -972,7 +1011,7 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     };
     return {
       ...normalizedSlide,
-      layout: improveLayoutForContent(normalizedSlide, index, targetCount, input),
+      layout: normalizeSlideLayout(normalizedSlide.layout, index, input),
       sourceSlides: normalizeSourceSlides(slide.sourceSlides, index, input),
     };
   });
@@ -987,6 +1026,56 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     theme: normalizeTheme(deck.theme, input),
     slides: groundedSlides,
   };
+}
+
+function postProcessGeneratedDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
+  return repairSourceDetailCoverage(removeGenericTemplateArtifacts(deck, input), input);
+}
+
+function removeGenericTemplateArtifacts(deck: DeckSpec, input: PresentationRequest): DeckSpec {
+  const sourceText = normalizeComparableText(extractUserSourceMaterial(input.prompt));
+  const sourceMentionsBeforeAfter = /(之前|之后|前后|优化前|优化后|改版前|改版后|before|after)/i.test(sourceText);
+
+  return {
+    ...deck,
+    slides: deck.slides.map((slide) => {
+      const body = (slide.body || []).filter((item) => !isGenericTemplateLabel(item));
+      const nextSlide = {
+        ...slide,
+        kicker: isGenericTemplateLabel(slide.kicker) ? "" : slide.kicker,
+        subtitle: isGenericTemplateLabel(slide.subtitle) ? "" : slide.subtitle,
+        body,
+        takeaway: isGenericTemplateLabel(slide.takeaway) ? "" : slide.takeaway,
+        metric: isGenericTemplateMetric(slide.metric) ? undefined : slide.metric,
+      };
+
+      if (nextSlide.layout === "beforeAfter" && !sourceMentionsBeforeAfter && !hasDistinctBodyItems(body, 2)) {
+        return { ...nextSlide, layout: "content" };
+      }
+
+      if (nextSlide.layout === "executiveSummary" && body.length < 2) {
+        return { ...nextSlide, layout: "content" };
+      }
+
+      return nextSlide;
+    }),
+  };
+}
+
+function isGenericTemplateLabel(value: unknown) {
+  const text = cleanGeneratedText(value).replace(/\s+/g, "");
+  if (!text) return false;
+  return /^(信号|证据|风险|行动|核心信号|关键证据|核心判断|建议动作|推荐动作|预期影响|关键说明|应用示例|限制与挑战|下一步思考|现状|优化后|结果|focus|keysignal)$/i.test(text.replace(/[：:：]$/, ""));
+}
+
+function isGenericTemplateMetric(metric: DeckSpec["slides"][number]["metric"]) {
+  if (!metric) return false;
+  const label = cleanGeneratedText(metric.label);
+  const value = cleanGeneratedText(metric.value);
+  const context = cleanGeneratedText(metric.context);
+  if (!label && !value && !context) return true;
+  if (/^(01|Q|N\/A)$/i.test(value) && (isGenericTemplateLabel(label) || isGenericTemplateLabel(context))) return true;
+  return false;
 }
 
 function ensureExplicitSectionSlides(slides: DeckSpec["slides"], input: PresentationRequest, targetCount: number) {
@@ -1145,6 +1234,32 @@ function normalizeSourceSlides(sourceSlides: number[] | undefined, index: number
   return Array.from(new Set(values)).slice(0, 4);
 }
 
+function normalizeSlideLayout(layout: DeckSpec["slides"][number]["layout"] | undefined, index: number, input: PresentationRequest) {
+  const allowed: DeckSpec["slides"][number]["layout"][] = [
+    "cover",
+    "agenda",
+    "section",
+    "executiveSummary",
+    "content",
+    "chart",
+    "comparison",
+    "timeline",
+    "matrix",
+    "heroMetric",
+    "splitStory",
+    "threeCards",
+    "beforeAfter",
+    "insightGrid",
+    "process",
+    "caseStudy",
+    "quote",
+    "dashboard",
+    "closing",
+  ];
+  if (layout && allowed.includes(layout)) return layout;
+  return index === 0 && input.source !== "ppt" ? "cover" : "content";
+}
+
 function enforceSourceGrounding(deck: DeckSpec, input: PresentationRequest): DeckSpec {
   const sourceMaterial = extractUserSourceMaterial(input.prompt);
   if (!sourceMaterial) return deck;
@@ -1280,7 +1395,7 @@ function normalizeSlideBody(body: unknown) {
 
 function trimSlideBody(body: string[] | undefined) {
   if (!body?.length) return body;
-  return body.slice(0, 5).map((item) => compactPromptText(item, 82)).filter(Boolean);
+  return body.slice(0, 5).map((item) => compactPromptText(item, 120)).filter(Boolean);
 }
 
 function normalizeMetric(metric: DeckSpec["slides"][number]["metric"]) {
