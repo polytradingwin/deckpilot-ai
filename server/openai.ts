@@ -224,7 +224,7 @@ export async function createDeckWithAnthropic(input: PresentationRequest): Promi
       }
       const draftDeck = normalizeDeck(parseDeckJson(text), input);
       const refinedDeck = await refineDeckWithAnthropic(apiKey, model, input, draftDeck);
-      const deck = normalizeDeck(refinedDeck || draftDeck, input);
+      const deck = repairSourceDetailCoverage(normalizeDeck(refinedDeck || draftDeck, input), input);
       validateSourceAnchors(deck, input);
       validateSourceCoverage(deck, input);
       return deck;
@@ -249,7 +249,7 @@ async function createDeckWithOpenAIModels(apiKey: string, models: string[], inpu
         if (!text) {
           throw new Error("OpenAI did not return a structured deck.");
         }
-        const deck = normalizeDeck(parseDeckJson(text), input);
+        const deck = repairSourceDetailCoverage(normalizeDeck(parseDeckJson(text), input), input);
         validateSourceAnchors(deck, input);
         validateSourceCoverage(deck, input);
         return deck;
@@ -1006,6 +1006,66 @@ function ensureExplicitSectionSlides(slides: DeckSpec["slides"], input: Presenta
     ...additions,
     ...nextSlides.slice(insertIndex),
   ].slice(0, 30);
+}
+
+function repairSourceDetailCoverage(deck: DeckSpec, input: PresentationRequest): DeckSpec {
+  const sourceMaterial = extractUserSourceMaterial(input.prompt);
+  const sections = extractExplicitSourceSections(sourceMaterial).slice(0, 16);
+  if (sections.length < 2) return deck;
+
+  const slides = deck.slides.map((slide) => ({
+    ...slide,
+    body: slide.body ? [...slide.body] : [],
+  }));
+  let deckText = normalizeComparableText(collectVisibleDeckText({ ...deck, slides }));
+  const supplementalSlides: DeckSpec["slides"] = [];
+
+  sections.forEach((section) => {
+    const missingLines = section.body.slice(0, 8).filter((line) => !sourceTermCovered(deckText, line));
+    if (!missingLines.length) return;
+
+    let targetIndex = slides.findIndex((slide) => isCoverageContentSlide(slide) && slideCoversSourceSection(slide, section));
+    if (targetIndex < 0) {
+      targetIndex = Math.max(0, slides.length - 1);
+    }
+
+    const targetSlide = slides[targetIndex];
+    const overflow: string[] = [];
+    if (targetSlide) {
+      const body = uniqueNonEmpty([...(targetSlide.body || []), ...missingLines.map((line) => compactSourceText(line, 120))]);
+      targetSlide.body = body.slice(0, 5);
+      overflow.push(...body.slice(5));
+      if (!sourceTermCovered(normalizeComparableText(targetSlide.title || ""), section.title)) {
+        targetSlide.takeaway = targetSlide.takeaway || compactSourceText(section.body[0] || section.title, 100);
+      }
+    } else {
+      overflow.push(...missingLines);
+    }
+
+    for (let index = 0; index < overflow.length; index += 5) {
+      supplementalSlides.push({
+        layout: "content",
+        kicker: "补充事实",
+        title: `${section.title}：关键细节`,
+        body: overflow.slice(index, index + 5).map((line) => compactSourceText(line, 120)),
+        takeaway: compactSourceText(overflow[index] || section.title, 100),
+      });
+    }
+
+    deckText = normalizeComparableText(collectVisibleDeckText({ ...deck, slides: [...slides, ...supplementalSlides] }));
+  });
+
+  if (!supplementalSlides.length) return { ...deck, slides };
+  const closingIndex = slides.findIndex((slide, index) => index > 0 && slide.layout === "closing");
+  const insertIndex = closingIndex >= 0 ? closingIndex : slides.length;
+  return {
+    ...deck,
+    slides: [
+      ...slides.slice(0, insertIndex),
+      ...supplementalSlides,
+      ...slides.slice(insertIndex),
+    ].slice(0, 30),
+  };
 }
 
 function mergeSectionDetailsIntoSlide(
