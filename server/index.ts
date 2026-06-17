@@ -332,7 +332,7 @@ async function validateRequest(
 ): Promise<PresentationRequest> {
   const source = parseEnum(body.source, ["ppt", "outline"], "source");
   const purpose = parseEnum(body.purpose, ["fundraising", "sales", "training", "report"], "purpose");
-  const style = parseEnum(body.style, ["consulting", "product", "brand", "academic"], "style");
+  const style = parseEnum(body.style || "consulting", ["consulting", "product", "brand", "academic"], "style");
   const slides = Number(body.slides);
   let prompt = String(body.prompt || "").trim();
 

@@ -238,9 +238,12 @@ const localizedContent = {
       viewSamples: "查看样例",
       generatorLabel: "PPT 生成器",
       stepsLabel: "生成步骤",
-      steps: ["上传内容", "PPT 用途", "输出设置"],
-      stepHeads: ["你手上现在有什么？", "这份 PPT 是给人讲，还是给人看？", "最终希望是什么风格？"],
+      steps: ["上传内容", "PPT 用途", "开始生成"],
+      stepHeads: ["你手上现在有什么？", "这份 PPT 是给人讲，还是给人看？", "DeckEvo 将自动决定最终风格"],
       engine: "顶级 AI 引擎",
+      autoDesign: "自动设计",
+      autoDesignTitle: "由 Claude 按文稿自动生成",
+      autoDesignBody: "系统会根据你的内容、用途和观众自动决定页数、结构、视觉风格与版式，不再套用固定模板。",
       uploadPlaceholder: "拖入 .pptx 文件或点击上传",
       uploadSelected: "已选择旧稿，生成时会先解析原始页面内容",
       uploadHelp: "支持 .pptx，后端会解析旧稿并重构成新演示",
@@ -467,7 +470,7 @@ const localizedContent = {
       },
       {
         q: "Can I upload an old PPT and redesign it?",
-        a: "Yes. You can upload a .pptx file. The backend extracts the original slide text and rebuilds it by purpose, audience, and style.",
+        a: "Yes. You can upload a .pptx file. The backend extracts the original slide text and rebuilds it by purpose, audience, and source content.",
       },
       {
         q: "Does it support Chinese, English, and bilingual decks?",
@@ -497,9 +500,12 @@ const localizedContent = {
       viewSamples: "View examples",
       generatorLabel: "PPT generator",
       stepsLabel: "Generation steps",
-      steps: ["Upload content", "PPT purpose", "Output setup"],
-      stepHeads: ["What material do you have?", "Is this deck for presenting or reading?", "What final style do you want?"],
+      steps: ["Upload content", "PPT purpose", "Generate"],
+      stepHeads: ["What material do you have?", "Is this deck for presenting or reading?", "DeckEvo will choose the final style"],
       engine: "Premium AI engine",
+      autoDesign: "Auto design",
+      autoDesignTitle: "Claude generates from the source material",
+      autoDesignBody: "DeckEvo will decide slide count, structure, visual style, and layout from your content, purpose, and audience instead of applying a fixed template.",
       uploadPlaceholder: "Drop a .pptx file or click to upload",
       uploadSelected: "Existing deck selected. We will parse and rebuild the original slides.",
       uploadHelp: "Supports .pptx. The backend parses the deck and reconstructs a new presentation.",
@@ -703,7 +709,7 @@ function App() {
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<SourceType>("outline");
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("presenting");
-  const [style, setStyle] = useState<Style>("consulting");
+  const autoStyle: Style = "consulting";
   const [audience, setAudience] = useState<string>(content.defaultAudience);
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -740,7 +746,6 @@ function App() {
   const accountName = user?.email.split("@")[0] || "";
   const sourceOptions = content.sourceOptions;
   const deliveryOptions = content.deliveryOptions;
-  const styleOptions = content.styleOptions;
   const pricingPlans = content.pricingPlans;
   const qualityItems = content.qualityItems;
   const beforeAfterCases = content.beforeAfterCases;
@@ -989,7 +994,7 @@ function App() {
         const formData = new FormData();
         formData.append("source", source);
         formData.append("purpose", purpose);
-        formData.append("style", style);
+        formData.append("style", autoStyle);
         formData.append("slides", String(inferredSlides));
         formData.append("language", outputLanguage);
         formData.append("audience", generationAudience);
@@ -1011,7 +1016,7 @@ function App() {
         body: JSON.stringify({
           source,
           purpose,
-          style,
+          style: autoStyle,
           slides: inferredSlides,
           language: outputLanguage,
           audience: generationAudience,
@@ -1024,7 +1029,7 @@ function App() {
     const formData = new FormData();
     formData.append("source", source);
     formData.append("purpose", purpose);
-    formData.append("style", style);
+    formData.append("style", autoStyle);
     formData.append("slides", String(inferredSlides));
     formData.append("language", outputLanguage);
     formData.append("audience", generationAudience);
@@ -1319,15 +1324,12 @@ function App() {
 
             {step === 3 && (
               <div className="step-body">
-                <div className="option-grid two">
-                  {styleOptions.map((item) => (
-                    <SelectButton
-                      item={item}
-                      key={item.id}
-                      selected={style === item.id}
-                      onClick={() => setStyle(item.id)}
-                    />
-                  ))}
+                <div className="auto-design-card">
+                  <Sparkles size={24} />
+                  <div>
+                    <strong>{ui.autoDesignTitle}</strong>
+                    <p>{ui.autoDesignBody}</p>
+                  </div>
                 </div>
 
                 <div className="panel-actions split">
@@ -1369,7 +1371,7 @@ function App() {
             </div>
             <div className={`deck-canvas ${isGenerating ? "loading" : ""}`}>
               <div className="deck-cover">
-                <span>{styleOptions.find((item) => item.id === style)?.title}</span>
+                <span>{ui.autoDesign}</span>
                 <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
                 <p>{ui.autoSlidesLanguage}</p>
               </div>

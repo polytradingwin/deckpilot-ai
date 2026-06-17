@@ -550,8 +550,9 @@ function stripJsonFence(text: string) {
 }
 
 function buildUserPrompt(input: PresentationRequest, previousError?: string) {
-  const visualDirection = pickVisualDirection(input);
   const sourceMaterial = extractUserSourceMaterial(input.prompt);
+  const visualDirection = pickVisualDirection(input, sourceMaterial);
+  const autoDesignGuidance = buildAutoDesignGuidance(input, sourceMaterial);
   const requestedSlides = resolveRequestedSlideCount(input, sourceMaterial);
   const sourceInstructions = extractUserInstructions(input.prompt);
   const explicitSections = extractExplicitSourceSections(sourceMaterial);
@@ -563,8 +564,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     previousError ? "Regenerate the entire JSON deck. Do not repeat the formatting mistake." : "",
     `Source type: ${input.source}`,
     `Use case: ${input.purpose}`,
-    `Visual style: ${input.style}`,
-    `Style guidance: ${styleGuidance(input.style)}`,
+    "Visual style: automatic. The user is not choosing a template or style.",
+    `Design standard: ${autoDesignGuidance}`,
     `Requested slides: ${requestedSlides}`,
     `Language: ${input.language}`,
     `Audience: ${input.audience}`,
@@ -673,38 +674,71 @@ function structureRequirements(input: PresentationRequest, explicitSectionCount 
   ];
 }
 
-function pickVisualDirection(input: PresentationRequest) {
-  const directions: Record<PresentationRequest["style"], string[]> = {
-    consulting: [
-      "executiveDark: dark boardroom deck, cinematic cover, large claims, sparse evidence blocks, gold accent",
-      "dataGrid: operating dashboard deck, visible grid system, KPI rows, dense but organized evidence",
-      "warmBoardroom: premium investor memo, warm dark palette, serif-like rhythm, decision cards",
-      "corporateClean: internal leadership report, bright background, blue/teal system colors, clear KPI hierarchy",
-      "creativePitch: client-facing proposal, expressive blocks, bigger typography, richer color moments",
-    ],
-    product: [
-      "productNeon: modular product UI deck, dark panels, cyan signal lines, system architecture feel",
-      "dataGrid: technical operating dashboard, grid rails, compact labels, proof-led modules",
-      "executiveDark: enterprise sales deck, restrained dark theme, strong product claims",
-      "brandGradient: modern product launch deck, color gradients, bold positioning, demo-like composition",
-    ],
-    brand: [
-      "editorialLight: magazine-like brand story, wide whitespace, warm paper, expressive section pages",
-      "warmBoardroom: premium launch narrative, cinematic contrast, bold statement pages",
-      "productNeon: modern digital campaign deck, dark interactive product feel",
-      "creativePitch: agency proposal deck, expressive typography, colorful concept pages, client-facing polish",
-      "brandGradient: VI-led brand deck, primary color system, gradients, emotional section rhythm",
-    ],
-    academic: [
-      "academicPaper: research paper deck, light background, thin rules, method/evidence/conclusion rhythm",
-      "editorialLight: journal-style explainer, calm whitespace, annotated evidence blocks",
-      "dataGrid: evidence dashboard, matrix pages, numbered findings, compact references",
-      "corporateClean: internal research readout, clean blue/gray palette, accessible summary hierarchy",
-    ],
-  };
+function pickVisualDirection(input: PresentationRequest, sourceMaterial = "") {
+  const text = `${sourceMaterial}\n${input.audience}\n${input.purpose}`.toLowerCase();
+  const candidates: string[] = [];
 
-  const pool = directions[input.style] || directions.consulting;
+  if (/(营销|推广|投放|预算|费用|小红书|美团|抖音|roi|campaign|marketing|budget|growth)/i.test(text)) {
+    candidates.push(
+      "commercialPlan: polished marketing-budget presentation, warm executive palette, clear spend-to-outcome story, budget split pages, ROI proof, concise boss-facing summary",
+      "clientProposal: agency-grade proposal rhythm, expressive section pages, richer color moments, channel cards, campaign logic, persuasive but still editable",
+      "operatingReview: internal management report, clean KPI hierarchy, budget allocation tables, evidence-led recommendation, controlled color system",
+    );
+  }
+
+  if (/(人工智能|机器学习|深度学习|自然语言|计算机视觉|课程|培训|科普|ai|machine learning|education|training|lesson|explainer)/i.test(text)) {
+    candidates.push(
+      "premiumExplainer: accessible education deck, varied chapter pages, diagrams for concepts, examples preserved, bright accent moments, readable learning flow",
+      "knowledgeMap: structured course deck, one concept per page, visual taxonomy, examples and frameworks carried through, calm high-contrast design",
+    );
+  }
+
+  if (/(产品|平台|系统|功能|架构|api|saas|模型|数据|技术|product|platform|system|architecture)/i.test(text)) {
+    candidates.push(
+      "productNarrative: modern product deck, modular UI-like panels, workflow diagrams, capability map, proof points, refined tech color palette",
+      "technicalBoardroom: executive technical readout, dark/light mixed rhythm, architecture and evidence pages, precise hierarchy",
+    );
+  }
+
+  if (/(老板|高管|管理层|汇报|月报|周报|复盘|目标|okr|领导|executive|board|management|report)/i.test(text)) {
+    candidates.push(
+      "executiveMemo: boardroom-ready report, sharp recommendation titles, dense but organized evidence, decision pages, no decorative filler",
+      "corporateClean: internal leadership deck, clear progress/status pages, varied KPI and action layouts, restrained professional palette",
+    );
+  }
+
+  if (input.source === "ppt") {
+    candidates.push(
+      "sourceFaithfulRedesign: preserve uploaded deck order and facts, reuse brand cues, redesign page hierarchy, avoid rewriting into a different topic",
+    );
+  }
+
+  const fallback = [
+    "claudeAppLike: flexible commercial presentation, content-first structure, varied layouts, no fixed template frame, polished editorial rhythm",
+    "creativePitch: expressive client-facing presentation, larger contrast, colorful section rhythm, strongly differentiated page compositions",
+    "editorialLight: premium magazine-like presentation, wide whitespace, refined type scale, source-backed narrative flow",
+    "dataGrid: evidence-rich operating deck, visible grid system, compact modules, clear charts only when numbers exist",
+  ];
+
+  const pool = candidates.length ? candidates : fallback;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function buildAutoDesignGuidance(input: PresentationRequest, sourceMaterial: string) {
+  const sourceMode = input.source === "ppt"
+    ? "For uploaded PPTX, preserve the original facts, order, brand cues, and source assets where possible while improving hierarchy."
+    : "For pasted text, treat the text as the complete source brief and cover every section or bullet before adding synthesis.";
+  const deliveryMode = input.purpose === "sales" || input.purpose === "fundraising"
+    ? "If the deck is for live presenting, create clear talk-track pages with one main message per slide. If it is for reading, make pages more self-contained."
+    : "Match density to audience: executives need conclusion-first pages; learners need definitions, examples, and concept scaffolding.";
+
+  return [
+    sourceMode,
+    deliveryMode,
+    "Infer the best visual direction from the material itself. Do not force consulting/product/brand/academic templates.",
+    "Use varied page types only when the content supports them: title message, chapter map, budget table, KPI proof, concept diagram, case/example, comparison, process, summary.",
+    "Every visible element must have a job. Empty framed boxes, placeholders, generic labels, duplicated before/after content, and decorative filler are not acceptable.",
+  ].join(" ");
 }
 
 function sourceSpecificRequirements(input: PresentationRequest) {
@@ -1438,12 +1472,12 @@ function compactPromptText(value: unknown, maxLength: number) {
 
 function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: PresentationRequest): DeckSpec["theme"] {
   const detectedBrandColors = detectBrandColors(input.prompt);
-  const accent = theme?.accent || (input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold");
   const template = theme?.template || defaultTemplate(input);
+  const accent = theme?.accent || defaultAccentForTemplate(template);
   const density = theme?.density || (input.slides >= 16 ? "dense" : input.slides <= 6 ? "calm" : "balanced");
   return {
     accent,
-    mood: theme?.mood || input.style,
+    mood: theme?.mood || defaultMoodForTemplate(template),
     template,
     density,
     fontStyle: theme?.fontStyle || defaultFontStyle(template),
@@ -1451,6 +1485,21 @@ function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: Presentatio
     brandPrimary: normalizeHexColor(theme?.brandPrimary) || detectedBrandColors[0],
     brandSecondary: normalizeHexColor(theme?.brandSecondary) || detectedBrandColors[1],
   };
+}
+
+function defaultAccentForTemplate(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "productNeon" || template === "dataGrid") return "cyan";
+  if (template === "academicPaper" || template === "editorialLight") return "sage";
+  if (template === "creativePitch" || template === "brandGradient") return "gold";
+  return "gold";
+}
+
+function defaultMoodForTemplate(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "productNeon" || template === "dataGrid") return "technical";
+  if (template === "creativePitch" || template === "brandGradient") return "creative";
+  if (template === "academicPaper" || template === "editorialLight") return "editorial";
+  if (template === "internalOps" || template === "corporateClean") return "corporate";
+  return "executive";
 }
 
 function detectBrandColors(text: string) {
@@ -1479,15 +1528,29 @@ function defaultPaletteIntent(template: NonNullable<DeckSpec["theme"]["template"
 }
 
 function defaultTemplate(input: PresentationRequest): NonNullable<DeckSpec["theme"]["template"]> {
-  const options: Record<PresentationRequest["style"], NonNullable<DeckSpec["theme"]["template"]>[]> = {
-    consulting: input.purpose === "fundraising"
-      ? ["warmBoardroom", "executiveDark", "corporateClean", "creativePitch"]
-      : ["corporateClean", "internalOps", "dataGrid", "executiveDark", "creativePitch"],
-    product: input.purpose === "report" ? ["dataGrid", "corporateClean", "internalOps", "productNeon"] : ["productNeon", "brandGradient", "dataGrid", "executiveDark"],
-    brand: ["creativePitch", "brandGradient", "editorialLight", "warmBoardroom", "productNeon"],
-    academic: ["academicPaper", "editorialLight", "corporateClean", "dataGrid"],
-  };
-  const pool = options[input.style] || options.consulting;
+  const text = `${extractUserSourceMaterial(input.prompt)}\n${input.audience}\n${input.purpose}`.toLowerCase();
+  const pool: NonNullable<DeckSpec["theme"]["template"]>[] = [];
+
+  if (/(营销|推广|投放|预算|费用|小红书|美团|抖音|roi|campaign|marketing|budget|growth)/i.test(text)) {
+    pool.push("creativePitch", "warmBoardroom", "corporateClean", "dataGrid");
+  }
+  if (/(人工智能|机器学习|深度学习|自然语言|计算机视觉|课程|培训|科普|education|training|lesson|explainer)/i.test(text)) {
+    pool.push("editorialLight", "academicPaper", "corporateClean", "productNeon");
+  }
+  if (/(产品|平台|系统|功能|架构|api|saas|模型|数据|技术|product|platform|system|architecture)/i.test(text)) {
+    pool.push("productNeon", "dataGrid", "brandGradient", "corporateClean");
+  }
+  if (/(老板|高管|管理层|汇报|月报|周报|复盘|目标|okr|executive|board|management|report)/i.test(text)) {
+    pool.push("corporateClean", "internalOps", "warmBoardroom", "dataGrid");
+  }
+  if (input.source === "ppt") {
+    pool.push("corporateClean", "dataGrid", "warmBoardroom", "editorialLight");
+  }
+
+  if (!pool.length) {
+    pool.push("editorialLight", "corporateClean", "creativePitch", "dataGrid", "warmBoardroom");
+  }
+
   return pool[Math.floor(Math.random() * pool.length)] || "executiveDark";
 }
 
@@ -1644,7 +1707,7 @@ function createMockDeck(input: PresentationRequest): DeckSpec {
     subtitle: "Generated by DeckEvo",
     language: input.language,
     audience: input.audience,
-    theme: normalizeTheme({ accent: input.style === "product" ? "cyan" : input.style === "academic" ? "sage" : "gold", mood: input.style }, input),
+    theme: normalizeTheme(undefined, input),
     slides: baseSlides.slice(0, requestedSlides),
   };
 }
