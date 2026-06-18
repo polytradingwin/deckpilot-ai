@@ -564,6 +564,11 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
     return;
   }
 
+  if (slide.layout === "claudeCanvas") {
+    renderClaudeCanvas(page, slide, index, accent, template);
+    return;
+  }
+
   if (slide.layout === "closing") {
     renderClosing(page, slide, accent);
     return;
@@ -859,6 +864,265 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
     addMetricCard(page, slide.metric.label, slide.metric.value, slide.metric.context, accent);
   }
   addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: number, accent: Accent, template: DeckTemplate) {
+  const items = fallbackSlideItems(slide, 5);
+  const seed = textSeed(`${slide.title}|${slide.subtitle || ""}|${slide.visual || ""}|${items.join("|")}|${index}`);
+  const variant = seed % 5;
+  const titleSize = visualLength(slide.title) > 32 ? 24 : visualLength(slide.title) > 22 ? 28 : 32;
+  const isLight = template === "editorialLight" || template === "academicPaper" || template === "corporateClean" || template === "internalOps";
+  const panelFill = isLight ? colors.panel : colors.panel2;
+  const softFill = isLight ? colors.panel2 : colors.panel;
+
+  if (variant === 0) {
+    page.addShape("rect", {
+      x: 0.82,
+      y: 1.08,
+      w: 0.14,
+      h: 4.6,
+      fill: { color: colors[accent] },
+      line: { color: colors[accent], transparency: 100 },
+    });
+    page.addText(slide.title, {
+      x: 1.18,
+      y: 1.08,
+      w: 8.45,
+      h: 1.08,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    if (slide.subtitle) {
+      page.addText(slide.subtitle, {
+        x: 1.2,
+        y: 2.2,
+        w: 7.2,
+        h: 0.34,
+        fit: "shrink",
+        fontSize: 11,
+        color: colors.muted,
+        margin: 0,
+      });
+    }
+    renderFreeformList(page, items, 1.2, 3.0, 6.9, accent, "minimal");
+  } else if (variant === 1) {
+    page.addText(slide.title, {
+      x: 0.82,
+      y: 1.0,
+      w: 10.8,
+      h: 0.92,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    items.slice(0, 4).forEach((item, itemIndex) => {
+      const x = 0.98 + itemIndex * 2.92;
+      const y = 2.45 + (itemIndex % 2) * 0.42;
+      page.addShape("rect", {
+        x,
+        y,
+        w: 2.45,
+        h: 2.45,
+        fill: { color: itemIndex === 0 ? colors[accent] : panelFill, transparency: itemIndex === 0 ? 8 : 2 },
+        line: { color: itemIndex === 0 ? colors[accent] : colors.line, transparency: 10, width: 0.9 },
+      });
+      page.addText(String(itemIndex + 1).padStart(2, "0"), {
+        x: x + 0.25,
+        y: y + 0.26,
+        w: 0.5,
+        h: 0.24,
+        fontSize: 9,
+        bold: true,
+        color: itemIndex === 0 ? colors.bg : colors[accent],
+        margin: 0,
+      });
+      page.addText(item, {
+        x: x + 0.28,
+        y: y + 0.86,
+        w: 1.9,
+        h: 0.92,
+        fit: "shrink",
+        fontSize: denseTextFontSize(item, 14),
+        bold: true,
+        color: itemIndex === 0 ? colors.bg : colors.text,
+        margin: 0,
+      });
+    });
+  } else if (variant === 2) {
+    page.addShape("rect", {
+      x: 0.76,
+      y: 1.1,
+      w: 4.3,
+      h: 4.7,
+      fill: { color: softFill, transparency: 2 },
+      line: { color: colors.line, transparency: 16 },
+    });
+    page.addText(slide.title, {
+      x: 1.08,
+      y: 1.5,
+      w: 3.45,
+      h: 1.5,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: Math.max(22, titleSize - 4),
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    if (items[0]) {
+      page.addText(items[0], {
+        x: 1.12,
+        y: 3.55,
+        w: 3.25,
+        h: 0.8,
+        fit: "shrink",
+        fontSize: denseTextFontSize(items[0], 13),
+        color: colors.muted,
+        margin: 0,
+      });
+    }
+    items.slice(1, 5).forEach((item, itemIndex) => {
+      const y = 1.18 + itemIndex * 1.08;
+      page.addShape("rect", {
+        x: 5.62,
+        y,
+        w: 5.75,
+        h: 0.82,
+        fill: { color: panelFill, transparency: 4 },
+        line: { color: itemIndex === 0 ? colors[accent] : colors.line, transparency: 12 },
+      });
+      page.addText(item, {
+        x: 5.96,
+        y: y + 0.2,
+        w: 5.05,
+        h: 0.3,
+        fit: "shrink",
+        fontSize: denseTextFontSize(item, 13),
+        bold: itemIndex === 0,
+        color: colors.text,
+        margin: 0,
+      });
+    });
+  } else if (variant === 3) {
+    page.addText(slide.title, {
+      x: 0.78,
+      y: 1.05,
+      w: 6.1,
+      h: 1.35,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    if (slide.metric) {
+      page.addShape("rect", {
+        x: 7.6,
+        y: 1.08,
+        w: 3.8,
+        h: 1.58,
+        fill: { color: colors[accent], transparency: 4 },
+        line: { color: colors[accent], transparency: 10 },
+      });
+      page.addText(normalizeTextValue(slide.metric.value), {
+        x: 7.92,
+        y: 1.36,
+        w: 2.98,
+        h: 0.5,
+        fit: "shrink",
+        fontSize: 24,
+        bold: true,
+        color: colors.bg,
+        margin: 0,
+      });
+      page.addText(normalizeTextValue(slide.metric.label || slide.metric.context), {
+        x: 7.94,
+        y: 2.02,
+        w: 2.9,
+        h: 0.24,
+        fit: "shrink",
+        fontSize: 9,
+        color: colors.bg,
+        margin: 0,
+      });
+    }
+    renderFreeformList(page, items, 0.92, 3.0, 9.8, accent, "cards");
+  } else {
+    page.addShape("line", {
+      x: 1.0,
+      y: 1.38,
+      w: 10.6,
+      h: 0,
+      line: { color: colors[accent], transparency: 0, width: 1.3 },
+    });
+    page.addText(slide.title, {
+      x: 0.98,
+      y: 1.72,
+      w: 10.25,
+      h: 0.92,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+    });
+    renderFreeformList(page, items, 1.02, 3.1, 10.2, accent, "rail");
+  }
+
+  addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderFreeformList(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent, mode: "minimal" | "cards" | "rail") {
+  items.slice(0, 5).forEach((item, index) => {
+    const top = y + index * (mode === "cards" ? 0.66 : 0.56);
+    if (mode === "cards") {
+      page.addShape("rect", {
+        x,
+        y: top - 0.06,
+        w,
+        h: 0.48,
+        fill: { color: colors.panel2, transparency: 8 },
+        line: { color: colors.line, transparency: 18 },
+      });
+    } else if (mode === "rail") {
+      page.addShape("line", {
+        x,
+        y: top + 0.18,
+        w: 0.52,
+        h: 0,
+        line: { color: colors[accent], transparency: 0, width: 1.4 },
+      });
+    } else {
+      page.addShape("ellipse", {
+        x,
+        y: top + 0.09,
+        w: 0.13,
+        h: 0.13,
+        fill: { color: colors[accent] },
+        line: { color: colors[accent] },
+      });
+    }
+    page.addText(item, {
+      x: mode === "minimal" ? x + 0.32 : x + 0.72,
+      y: top,
+      w: mode === "minimal" ? w : w - 0.9,
+      h: 0.32,
+      fit: "shrink",
+      fontSize: denseTextFontSize(item, mode === "cards" ? 12.5 : 13.5),
+      bold: index === 0,
+      color: colors.text,
+      margin: 0,
+    });
+  });
 }
 
 function renderExecutiveSummary(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
@@ -2272,3 +2536,8 @@ function visualLength(text: string) {
   return Array.from(String(text || "")).reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 1.7 : 1), 0);
 }
 
+function textSeed(text: string) {
+  return Array.from(String(text || "")).reduce((sum, char, index) => {
+    return (sum + char.charCodeAt(0) * (index + 17)) % 1000003;
+  }, 0);
+}

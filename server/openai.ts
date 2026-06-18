@@ -85,6 +85,7 @@ const deckSchema = {
               "caseStudy",
               "quote",
               "dashboard",
+              "claudeCanvas",
               "closing",
             ],
           },
@@ -621,6 +622,8 @@ function buildUserPrompt(input: PresentationRequest, previousError?: string) {
     ...structureRequirements(input, explicitSections.length),
     "- Use chart layout only when the source gives real numbers. Do not invent chart data when exact numbers are absent.",
     "- Use layout plugins only when the source naturally supports them: heroMetric for one dominant claim/KPI, process for workflows, quote for a strong strategic recommendation, dashboard for multi-KPI operating pages, threeCards for exactly 3 pillars.",
+    "- For most normal content slides, use layout claudeCanvas. In claudeCanvas, write a concrete visual brief in visual that describes the exact page composition, hierarchy, whitespace, accent use, and editable elements.",
+    "- Only use the older named layouts when they are semantically necessary. Do not use repeated four-box, signal/evidence/risk/action, before/after, timeline, or dashboard patterns unless the source truly requires that structure.",
     "- Do not force a fixed analysis frame such as signal/evidence/risk/action. Use comparison, beforeAfter, splitStory, matrix, or insightGrid only when the source explicitly contains that structure and the slide items are meaningfully different.",
     "- Treat the template as a loose visual direction, not a rigid template. Vary composition, density, scale, image use, and rhythm slide by slide.",
     "- Dashboard cards must be short metric summaries, not pasted raw paragraphs. Keep each dashboard card value under 18 Chinese characters or 8 English words.",
@@ -736,7 +739,7 @@ function buildAutoDesignGuidance(input: PresentationRequest, sourceMaterial: str
     sourceMode,
     deliveryMode,
     "Infer the best visual direction from the material itself. Do not force consulting/product/brand/academic templates.",
-    "Use varied page types only when the content supports them: title message, chapter map, budget table, KPI proof, concept diagram, case/example, comparison, process, summary.",
+    "Prefer Claude-canvas pages: each slide should have a bespoke composition brief, not a named template. Use named page types only when the source structure requires them.",
     "Every visible element must have a job. Empty framed boxes, placeholders, generic labels, duplicated before/after content, and decorative filler are not acceptable.",
   ].join(" ");
 }
@@ -1027,7 +1030,7 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     });
   }
 
-  const enhancedSlides = slides.map((slide, index) => {
+  const enhancedSlides: DeckSpec["slides"] = slides.map((slide, index) => {
     const fallbackSlide = sourceBackedFallbackSlide(input, index);
     const normalizedBody = trimSlideBody(normalizeSlideBody(slide.body));
     const fallbackBody = trimSlideBody(normalizeSlideBody(fallbackSlide.body));
@@ -1045,7 +1048,7 @@ function normalizeDeck(deck: DeckSpec, input: PresentationRequest): DeckSpec {
     };
     return {
       ...normalizedSlide,
-      layout: normalizeSlideLayout(normalizedSlide.layout, index, input),
+      layout: normalizeSlideLayout(normalizedSlide.layout, index, input, normalizedSlide),
       sourceSlides: normalizeSourceSlides(slide.sourceSlides, index, input),
     };
   });
@@ -1268,7 +1271,12 @@ function normalizeSourceSlides(sourceSlides: number[] | undefined, index: number
   return Array.from(new Set(values)).slice(0, 4);
 }
 
-function normalizeSlideLayout(layout: DeckSpec["slides"][number]["layout"] | undefined, index: number, input: PresentationRequest) {
+function normalizeSlideLayout(
+  layout: DeckSpec["slides"][number]["layout"] | undefined,
+  index: number,
+  input: PresentationRequest,
+  slide?: Partial<DeckSpec["slides"][number]>,
+) {
   const allowed: DeckSpec["slides"][number]["layout"][] = [
     "cover",
     "agenda",
@@ -1288,10 +1296,14 @@ function normalizeSlideLayout(layout: DeckSpec["slides"][number]["layout"] | und
     "caseStudy",
     "quote",
     "dashboard",
+    "claudeCanvas",
     "closing",
   ];
-  if (layout && allowed.includes(layout)) return layout;
-  return index === 0 && input.source !== "ppt" ? "cover" : "content";
+  if (index === 0 && input.source !== "ppt") return "cover";
+  if (layout === "cover" || layout === "section" || layout === "closing") return layout;
+  if (layout === "chart" && slide?.chart) return "chart";
+  if (layout && allowed.includes(layout) && layout === "claudeCanvas") return layout;
+  return "claudeCanvas";
 }
 
 function enforceSourceGrounding(deck: DeckSpec, input: PresentationRequest): DeckSpec {

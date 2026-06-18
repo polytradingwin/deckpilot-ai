@@ -64,6 +64,7 @@ export type DeckSlide = {
     | "caseStudy"
     | "quote"
     | "dashboard"
+    | "claudeCanvas"
     | "closing";
   kicker?: string;
   title: string;
