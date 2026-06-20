@@ -11,7 +11,8 @@ export type DeckTemplate =
   | "creativePitch"
   | "corporateClean"
   | "brandGradient"
-  | "internalOps";
+  | "internalOps"
+  | "smartisanKeynote";
 export type FontStyle = "modernSans" | "editorialSerif" | "condensedImpact" | "roundedHuman";
 export type PaletteIntent = "brand" | "creative" | "corporate" | "tech" | "warm" | "academic";
 

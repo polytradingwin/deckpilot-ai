@@ -117,6 +117,17 @@ const palettes = {
     sage: "7A9B55",
     line: "D7DDD2",
   },
+  smartisanKeynote: {
+    bg: "0B0B0B",
+    panel: "111111",
+    panel2: "F4EFE5",
+    text: "F7F3EA",
+    muted: "A9A39A",
+    gold: "D8B36A",
+    cyan: "E34B3F",
+    sage: "B8B0A0",
+    line: "2B2B2B",
+  },
 } satisfies Record<DeckTemplate, Record<"bg" | "panel" | "panel2" | "text" | "muted" | "gold" | "cyan" | "sage" | "line", string>>;
 
 type Palette = (typeof palettes)[DeckTemplate];
@@ -301,6 +312,29 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, t
     fill: { color: colors.bg },
     line: { color: colors.bg },
   });
+
+  if (template === "smartisanKeynote") {
+    const lightPage = index % 5 === 2;
+    if (lightPage) {
+      page.background = { color: "F4EFE5" };
+      page.addShape("rect", {
+        x: 0,
+        y: 0,
+        w: 13.333,
+        h: 7.5,
+        fill: { color: "F4EFE5" },
+        line: { color: "F4EFE5" },
+      });
+    }
+    page.addShape("line", {
+      x: 0.84,
+      y: 6.78,
+      w: 11.65,
+      h: 0,
+      line: { color: lightPage ? "C8B99F" : colors.line, transparency: 24, width: 0.7 },
+    });
+    return;
+  }
 
   if (template === "editorialLight" || template === "academicPaper") {
     page.addShape("rect", {
@@ -604,6 +638,56 @@ function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total
 }
 
 function renderCover(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, template: DeckTemplate) {
+  if (template === "smartisanKeynote") {
+    const titleSize = visualLength(slide.title) > 28 ? 44 : 58;
+    page.addText(slide.title, {
+      x: 0.86,
+      y: 2.0,
+      w: 11.35,
+      h: 1.42,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: colors.text,
+      margin: 0,
+      align: "center",
+    });
+    page.addText(slide.subtitle || "", {
+      x: 2.2,
+      y: 3.75,
+      w: 8.9,
+      h: 0.34,
+      fit: "shrink",
+      fontSize: 14,
+      color: colors.muted,
+      margin: 0,
+      align: "center",
+    });
+    page.addShape("line", {
+      x: 5.42,
+      y: 4.52,
+      w: 2.45,
+      h: 0,
+      line: { color: colors[accent], transparency: 0, width: 1.2 },
+    });
+    const coverItems = fallbackSlideItems(slide, 3);
+    if (coverItems.length) {
+      page.addText(coverItems.join("  /  "), {
+        x: 2.2,
+        y: 5.08,
+        w: 8.9,
+        h: 0.26,
+        fit: "shrink",
+        fontSize: 10,
+        color: colors.muted,
+        margin: 0,
+        align: "center",
+      });
+    }
+    return;
+  }
+
   if (template === "editorialLight") {
     page.addText(slide.kicker || "DeckEvo", {
       x: 0.82,
@@ -867,6 +951,11 @@ function renderContent(page: PptxGenJS.Slide, slide: DeckSlide, accent: Accent, 
 }
 
 function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: number, accent: Accent, template: DeckTemplate) {
+  if (template === "smartisanKeynote") {
+    renderSmartisanKeynoteCanvas(page, slide, index, accent);
+    return;
+  }
+
   const items = fallbackSlideItems(slide, 5);
   const seed = textSeed(`${slide.title}|${slide.subtitle || ""}|${slide.visual || ""}|${items.join("|")}|${index}`);
   const variant = seed % 5;
@@ -1079,6 +1168,213 @@ function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: numb
   }
 
   addTakeaway(page, slide.takeaway, accent);
+}
+
+function renderSmartisanKeynoteCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: number, accent: Accent) {
+  const items = fallbackSlideItems(slide, 4);
+  const seed = textSeed(`${slide.title}|${slide.subtitle || ""}|${slide.visual || ""}|${items.join("|")}|${index}`);
+  const variant = seed % 6;
+  const lightPage = index % 5 === 2;
+  const titleColor = lightPage ? "111111" : colors.text;
+  const mutedColor = lightPage ? "5F5A52" : colors.muted;
+  const lineColor = lightPage ? "B69A64" : colors[accent];
+  const titleLen = visualLength(slide.title);
+  const titleSize = titleLen > 40 ? 31 : titleLen > 30 ? 38 : titleLen > 20 ? 46 : 56;
+
+  if (variant === 0) {
+    page.addText(slide.title, {
+      x: 0.86,
+      y: 2.0,
+      w: 11.2,
+      h: 1.35,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: titleColor,
+      margin: 0,
+      breakLine: false,
+    });
+    renderKeynoteSubtitle(page, slide.subtitle || items[0], 0.9, 3.72, 8.2, mutedColor);
+  } else if (variant === 1) {
+    page.addShape("line", {
+      x: 1.04,
+      y: 1.2,
+      w: 0,
+      h: 4.8,
+      line: { color: lineColor, transparency: 0, width: 2.2 },
+    });
+    page.addText(slide.title, {
+      x: 1.36,
+      y: 1.46,
+      w: 9.8,
+      h: 1.55,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: titleColor,
+      margin: 0,
+    });
+    renderKeynoteBullets(page, items, 1.42, 3.55, 8.6, titleColor, mutedColor, lineColor);
+  } else if (variant === 2) {
+    const metric = slide.metric?.value || extractFirstNumber(items.join(" ")) || "01";
+    page.addText(metric, {
+      x: 0.82,
+      y: 1.18,
+      w: 4.6,
+      h: 1.42,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: 64,
+      bold: true,
+      color: lineColor,
+      margin: 0,
+    });
+    page.addText(slide.title, {
+      x: 4.75,
+      y: 1.5,
+      w: 7.15,
+      h: 1.14,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: Math.max(30, titleSize - 10),
+      bold: true,
+      color: titleColor,
+      margin: 0,
+    });
+    renderKeynoteBullets(page, items, 4.82, 3.18, 6.85, titleColor, mutedColor, lineColor);
+  } else if (variant === 3) {
+    page.addShape("rect", {
+      x: 0.92,
+      y: 1.1,
+      w: 10.85,
+      h: 4.7,
+      fill: { color: lightPage ? "EEE6D7" : "111111", transparency: lightPage ? 0 : 4 },
+      line: { color: lineColor, transparency: 28, width: 1.1 },
+    });
+    page.addText(slide.title, {
+      x: 1.38,
+      y: 1.72,
+      w: 9.7,
+      h: 1.28,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: Math.max(30, titleSize - 8),
+      bold: true,
+      color: titleColor,
+      margin: 0,
+    });
+    renderKeynoteBullets(page, items, 1.44, 3.52, 8.8, titleColor, mutedColor, lineColor);
+  } else if (variant === 4) {
+    page.addText(slide.title, {
+      x: 1.0,
+      y: 1.14,
+      w: 6.2,
+      h: 2.05,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: Math.max(34, titleSize - 4),
+      bold: true,
+      color: titleColor,
+      margin: 0,
+    });
+    page.addShape("line", {
+      x: 7.62,
+      y: 1.32,
+      w: 0,
+      h: 4.38,
+      line: { color: lineColor, transparency: 0, width: 1.5 },
+    });
+    renderKeynoteBullets(page, items, 8.08, 1.55, 3.7, titleColor, mutedColor, lineColor);
+  } else {
+    const words = splitKeynoteTitle(slide.title);
+    page.addText(words[0], {
+      x: 0.82,
+      y: 1.24,
+      w: 10.9,
+      h: 0.92,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: Math.max(34, titleSize - 4),
+      bold: true,
+      color: mutedColor,
+      margin: 0,
+    });
+    page.addText(words[1] || slide.title, {
+      x: 0.82,
+      y: 2.42,
+      w: 11.2,
+      h: 1.3,
+      fit: "shrink",
+      fontFace: fontSet.head,
+      fontSize: titleSize,
+      bold: true,
+      color: lineColor,
+      margin: 0,
+    });
+    renderKeynoteSubtitle(page, slide.takeaway || items[0], 0.88, 4.28, 8.8, mutedColor);
+  }
+
+  if (slide.takeaway && variant !== 5) {
+    renderKeynoteSubtitle(page, slide.takeaway, 0.9, 6.16, 9.2, mutedColor);
+  }
+}
+
+function renderKeynoteSubtitle(page: PptxGenJS.Slide, text: string | undefined, x: number, y: number, w: number, color: string) {
+  const clean = compactText(text || "", 110);
+  if (!clean) return;
+  page.addText(clean, {
+    x,
+    y,
+    w,
+    h: 0.32,
+    fit: "shrink",
+    fontFace: fontSet.body,
+    fontSize: denseTextFontSize(clean, 14),
+    color,
+    margin: 0,
+  });
+}
+
+function renderKeynoteBullets(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, titleColor: string, mutedColor: string, lineColor: string) {
+  items.slice(0, 4).forEach((item, index) => {
+    const top = y + index * 0.64;
+    page.addText(index === 0 ? compactText(item, 76) : compactText(item, 96), {
+      x,
+      y: top,
+      w,
+      h: 0.34,
+      fit: "shrink",
+      fontFace: fontSet.body,
+      fontSize: denseTextFontSize(item, index === 0 ? 15 : 12.5),
+      bold: index === 0,
+      color: index === 0 ? titleColor : mutedColor,
+      margin: 0,
+    });
+    if (index === 0) {
+      page.addShape("line", {
+        x,
+        y: top + 0.48,
+        w: Math.min(w, 2.1),
+        h: 0,
+        line: { color: lineColor, transparency: 0, width: 1.1 },
+      });
+    }
+  });
+}
+
+function extractFirstNumber(text: string) {
+  const match = String(text || "").match(/[0-9][0-9,，.%万亿千百十+-]*/);
+  return match?.[0];
+}
+
+function splitKeynoteTitle(title: string) {
+  const text = normalizeTextValue(title);
+  if (text.includes("，")) return text.split(/，(.+)/).filter(Boolean).slice(0, 2);
+  if (text.includes(":")) return text.split(/:(.+)/).filter(Boolean).slice(0, 2);
+  if (text.length > 12) return [text.slice(0, Math.ceil(text.length / 2)), text.slice(Math.ceil(text.length / 2))];
+  return [text];
 }
 
 function renderFreeformList(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, accent: Accent, mode: "minimal" | "cards" | "rail") {

@@ -46,6 +46,7 @@ const deckSchema = {
             "corporateClean",
             "brandGradient",
             "internalOps",
+            "smartisanKeynote",
           ],
         },
         density: { type: "string", enum: ["calm", "balanced", "dense"] },
@@ -717,6 +718,7 @@ function pickVisualDirection(input: PresentationRequest, sourceMaterial = "") {
   }
 
   const fallback = [
+    "smartisanKeynote: Xu Cen / Luo Yonghao style product keynote, cinematic black or warm-white canvas, huge conclusion-first typography, very sparse text, one idea per slide, no decorative card grid",
     "claudeAppLike: flexible commercial presentation, content-first structure, varied layouts, no fixed template frame, polished editorial rhythm",
     "creativePitch: expressive client-facing presentation, larger contrast, colorful section rhythm, strongly differentiated page compositions",
     "editorialLight: premium magazine-like presentation, wide whitespace, refined type scale, source-backed narrative flow",
@@ -738,6 +740,9 @@ function buildAutoDesignGuidance(input: PresentationRequest, sourceMaterial: str
   return [
     sourceMode,
     deliveryMode,
+    "Default aesthetic target: Xu Cen / Luo Yonghao Smartisan keynote style. Make it feel like a refined product-launch presentation: cinematic, sparse, witty, conclusion-first, highly edited, and confident.",
+    "Use very large Chinese titles, strong whitespace, minimal ornaments, controlled black/warm-white/gold or black/white/red accents, and one clear idea per page.",
+    "Avoid consulting-style card grids, dashboard boxes, signal/evidence/risk/action frames, and generic business report templates unless the source absolutely requires them.",
     "Infer the best visual direction from the material itself. Do not force consulting/product/brand/academic templates.",
     "Prefer Claude-canvas pages: each slide should have a bespoke composition brief, not a named template. Use named page types only when the source structure requires them.",
     "Every visible element must have a job. Empty framed boxes, placeholders, generic labels, duplicated before/after content, and decorative filler are not acceptable.",
@@ -1500,6 +1505,7 @@ function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: Presentatio
 }
 
 function defaultAccentForTemplate(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "smartisanKeynote") return "gold";
   if (template === "productNeon" || template === "dataGrid") return "cyan";
   if (template === "academicPaper" || template === "editorialLight") return "sage";
   if (template === "creativePitch" || template === "brandGradient") return "gold";
@@ -1507,6 +1513,7 @@ function defaultAccentForTemplate(template: NonNullable<DeckSpec["theme"]["templ
 }
 
 function defaultMoodForTemplate(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "smartisanKeynote") return "keynote";
   if (template === "productNeon" || template === "dataGrid") return "technical";
   if (template === "creativePitch" || template === "brandGradient") return "creative";
   if (template === "academicPaper" || template === "editorialLight") return "editorial";
@@ -1525,6 +1532,7 @@ function normalizeHexColor(value: string | undefined) {
 }
 
 function defaultFontStyle(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "smartisanKeynote") return "condensedImpact";
   if (template === "creativePitch" || template === "brandGradient") return "condensedImpact";
   if (template === "editorialLight" || template === "academicPaper" || template === "warmBoardroom") return "editorialSerif";
   if (template === "internalOps" || template === "corporateClean") return "roundedHuman";
@@ -1532,6 +1540,7 @@ function defaultFontStyle(template: NonNullable<DeckSpec["theme"]["template"]>) 
 }
 
 function defaultPaletteIntent(template: NonNullable<DeckSpec["theme"]["template"]>) {
+  if (template === "smartisanKeynote") return "creative";
   if (template === "creativePitch" || template === "brandGradient") return "creative";
   if (template === "corporateClean" || template === "internalOps") return "corporate";
   if (template === "productNeon" || template === "dataGrid") return "tech";
@@ -1544,23 +1553,23 @@ function defaultTemplate(input: PresentationRequest): NonNullable<DeckSpec["them
   const pool: NonNullable<DeckSpec["theme"]["template"]>[] = [];
 
   if (/(营销|推广|投放|预算|费用|小红书|美团|抖音|roi|campaign|marketing|budget|growth)/i.test(text)) {
-    pool.push("creativePitch", "warmBoardroom", "corporateClean", "dataGrid");
+    pool.push("smartisanKeynote", "creativePitch", "warmBoardroom", "corporateClean", "dataGrid");
   }
   if (/(人工智能|机器学习|深度学习|自然语言|计算机视觉|课程|培训|科普|education|training|lesson|explainer)/i.test(text)) {
-    pool.push("editorialLight", "academicPaper", "corporateClean", "productNeon");
+    pool.push("smartisanKeynote", "editorialLight", "academicPaper", "corporateClean", "productNeon");
   }
   if (/(产品|平台|系统|功能|架构|api|saas|模型|数据|技术|product|platform|system|architecture)/i.test(text)) {
-    pool.push("productNeon", "dataGrid", "brandGradient", "corporateClean");
+    pool.push("smartisanKeynote", "productNeon", "dataGrid", "brandGradient", "corporateClean");
   }
   if (/(老板|高管|管理层|汇报|月报|周报|复盘|目标|okr|executive|board|management|report)/i.test(text)) {
-    pool.push("corporateClean", "internalOps", "warmBoardroom", "dataGrid");
+    pool.push("smartisanKeynote", "corporateClean", "internalOps", "warmBoardroom", "dataGrid");
   }
   if (input.source === "ppt") {
-    pool.push("corporateClean", "dataGrid", "warmBoardroom", "editorialLight");
+    pool.push("smartisanKeynote", "corporateClean", "dataGrid", "warmBoardroom", "editorialLight");
   }
 
   if (!pool.length) {
-    pool.push("editorialLight", "corporateClean", "creativePitch", "dataGrid", "warmBoardroom");
+    pool.push("smartisanKeynote", "editorialLight", "corporateClean", "creativePitch", "warmBoardroom");
   }
 
   return pool[Math.floor(Math.random() * pool.length)] || "executiveDark";
