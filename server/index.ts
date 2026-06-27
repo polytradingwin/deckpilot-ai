@@ -13,6 +13,7 @@ import { createGenerationJob, findGeneration, findGenerationJob, listGenerations
 import { getAIProvider, getConfiguredPrimaryModel } from "./openai";
 import { wrapSourceMaterial } from "./sourceGrounding";
 import { getEmailDeliveryMode } from "./email";
+import { createCheckoutSession, fulfillCheckoutSession, getStripePublicConfig, getStripeStatus, handleStripeWebhook } from "./stripeBilling";
 import { toUserFacingError } from "./userErrors";
 import type { PresentationRequest } from "../src/shared/deck";
 
@@ -68,6 +69,17 @@ app.use((req, res, next) => {
   next();
 });
 
+app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  try {
+    const result = await handleStripeWebhook(req.body as Buffer, req.headers["stripe-signature"] as string | undefined);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Stripe webhook failed.";
+    console.error(error);
+    res.status(400).send(message);
+  }
+});
+
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", async (_req, res) => {
@@ -84,7 +96,38 @@ app.get("/api/health", async (_req, res) => {
     maxSlides: getRuntimeMaxSlides(),
     emailDelivery: getEmailDeliveryMode(),
     canva: await getCanvaRuntimeStatus(),
+    stripe: getStripeStatus(),
   });
+});
+
+app.get("/api/billing/config", (_req, res) => {
+  res.json(getStripePublicConfig());
+});
+
+app.post("/api/billing/checkout", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const session = await createCheckoutSession(user, String(req.body?.packId || ""));
+    res.json({ url: session.url, id: session.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create Stripe checkout.";
+    console.error(error);
+    res.status(400).json({ error: message });
+  }
+});
+
+app.get("/api/billing/checkout-status", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const result = await fulfillCheckoutSession(String(req.query.session_id || ""), user.id);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to verify Stripe checkout.";
+    console.error(error);
+    res.status(400).json({ error: message });
+  }
 });
 
 app.get("/api/canva/status", async (_req, res) => {

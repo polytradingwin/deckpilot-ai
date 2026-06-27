@@ -52,6 +52,15 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS credit_payments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    reference_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+  );
 `);
 
 export function getDb() {

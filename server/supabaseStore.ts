@@ -32,6 +32,10 @@ export async function supabaseConsumeCredits(userId: string, amount: number) {
   await callSupabaseBackend<{ ok: boolean }>("consume_credits", { userId, amount });
 }
 
+export async function supabaseAddCredits(userId: string, amount: number, source: string, referenceId: string) {
+  await callSupabaseAddCredits<{ ok: boolean }>({ userId, amount, source, referenceId });
+}
+
 export async function supabaseGetUserById(userId: string) {
   const result = await callSupabaseBackend<{ user: UserAccount | null }>("get_user_by_id", { userId });
   return result.user;
@@ -80,22 +84,37 @@ export async function supabaseFindGenerationJob(userId: string, id: string) {
 }
 
 async function callSupabaseBackend<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+  return callSupabaseRpc<T>("deckpilot_backend", { action, payload, app_secret: getSupabaseSecret() });
+}
+
+async function callSupabaseAddCredits<T>(payload: Record<string, unknown>): Promise<T> {
+  return callSupabaseRpc<T>("deckpilot_add_credits", { payload, app_secret: getSupabaseSecret() });
+}
+
+function getSupabaseSecret() {
+  const secret = process.env.SUPABASE_BACKEND_SECRET;
+  if (!secret) {
+    throw new Error("Supabase is selected but SUPABASE_BACKEND_SECRET is missing.");
+  }
+  return secret;
+}
+
+async function callSupabaseRpc<T>(rpcName: string, body: Record<string, unknown>): Promise<T> {
   const url = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
-  const secret = process.env.SUPABASE_BACKEND_SECRET;
 
-  if (!url || !anonKey || !secret) {
-    throw new Error("Supabase is selected but SUPABASE_URL, SUPABASE_ANON_KEY, or SUPABASE_BACKEND_SECRET is missing.");
+  if (!url || !anonKey) {
+    throw new Error("Supabase is selected but SUPABASE_URL or SUPABASE_ANON_KEY is missing.");
   }
 
-  const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/deckpilot_backend`, {
+  const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/${rpcName}`, {
     method: "POST",
     headers: {
       apikey: anonKey,
       Authorization: `Bearer ${anonKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ action, payload, app_secret: secret }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

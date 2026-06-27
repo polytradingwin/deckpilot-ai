@@ -1184,6 +1184,12 @@ main {
   color: var(--gold);
 }
 
+.billing-message {
+  margin: 22px auto 0;
+  color: var(--gold);
+  text-align: center;
+}
+
 .outline-button {
   min-height: 48px;
   margin-top: auto;

@@ -1,6 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { supabaseConsumeCredits, supabaseFindUserBySession, supabaseGetUserById, supabaseLogin, supabaseLogout, useSupabaseStore } from "./supabaseStore";
+import { supabaseAddCredits, supabaseConsumeCredits, supabaseFindUserBySession, supabaseGetUserById, supabaseLogin, supabaseLogout, useSupabaseStore } from "./supabaseStore";
 import { sendLoginCodeEmail } from "./email";
 
 export type UserAccount = {
@@ -171,6 +171,28 @@ export async function consumeCredits(userId: string, amount: number) {
 
   const { getDb } = await import("./db");
   getDb().prepare("UPDATE users SET credits_used = credits_used + ? WHERE id = ?").run(amount, userId);
+}
+
+export async function addCredits(userId: string, amount: number, source: string, referenceId: string) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Credit amount must be positive.");
+  }
+
+  if (useSupabaseStore()) {
+    await supabaseAddCredits(userId, Math.round(amount), source, referenceId);
+    return;
+  }
+
+  const { getDb } = await import("./db");
+  const db = getDb();
+  const payment = db.prepare("SELECT id FROM credit_payments WHERE reference_id = ?").get(referenceId) as { id: string } | undefined;
+  if (payment) return;
+
+  const now = new Date().toISOString();
+  db.prepare(
+    "INSERT INTO credit_payments (id, user_id, amount, source, reference_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(randomUUID(), userId, Math.round(amount), source, referenceId, now);
+  db.prepare("UPDATE users SET credits_total = credits_total + ? WHERE id = ?").run(Math.round(amount), userId);
 }
 
 export async function getUserById(userId: string) {

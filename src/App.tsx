@@ -734,6 +734,8 @@ function App() {
   const [legalPage, setLegalPage] = useState<PolicyPage | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState("");
+  const [checkoutMessage, setCheckoutMessage] = useState("");
   const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const purpose = deliveryPurposeMap[deliveryMode];
@@ -750,10 +752,57 @@ function App() {
   const qualityItems = content.qualityItems;
   const beforeAfterCases = content.beforeAfterCases;
   const faqs = content.faqs;
+  const pricingPlanIds = ["starter", "monthly", "pro"];
+  const billingText =
+    uiLanguage === "zh"
+      ? {
+          paying: "正在跳转支付",
+          success: "付款成功，credits 已到账。",
+          cancelled: "付款已取消，未扣款。",
+          failed: "支付入口暂时不可用，请稍后再试。",
+          loginFirst: "请先登录邮箱，再购买 credits。",
+        }
+      : {
+          paying: "Opening checkout",
+          success: "Payment completed. Credits have been added.",
+          cancelled: "Payment cancelled. No charge was made.",
+          failed: "Checkout is temporarily unavailable. Please try again later.",
+          loginFirst: "Log in with email before buying credits.",
+        };
 
   useEffect(() => {
     void refreshSession();
   }, []);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const checkout = query.get("checkout");
+    const sessionId = query.get("session_id");
+    if (!checkout) return;
+
+    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState({}, "", cleanUrl);
+
+    if (checkout === "cancelled") {
+      setCheckoutMessage(billingText.cancelled);
+      return;
+    }
+    if (checkout !== "success" || !sessionId) return;
+
+    setCheckoutMessage("");
+    void (async () => {
+      try {
+        const response = await apiFetch(`/api/billing/checkout-status?session_id=${encodeURIComponent(sessionId)}`);
+        const payload = (await response.json().catch(() => ({}))) as { user?: UserAccount; error?: string };
+        if (!response.ok) throw new Error(payload.error || billingText.failed);
+        if (payload.user) setUser(payload.user);
+        await refreshSession();
+        setCheckoutMessage(billingText.success);
+      } catch (error) {
+        setCheckoutMessage(error instanceof Error ? error.message : billingText.failed);
+      }
+    })();
+  }, [billingText.cancelled, billingText.failed, billingText.success]);
 
   useEffect(() => {
     setAudience((current) => {
@@ -869,6 +918,30 @@ function App() {
     setGenerationId("");
     setAccountMenuOpen(false);
     setAccountOpen(false);
+  };
+
+  const startCheckout = async (planId: string) => {
+    setCheckoutMessage("");
+    if (!user) {
+      setCheckoutMessage(billingText.loginFirst);
+      openLogin();
+      return;
+    }
+
+    setCheckoutPlan(planId);
+    try {
+      const response = await apiFetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packId: planId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) throw new Error(payload.error || billingText.failed);
+      window.location.href = payload.url;
+    } catch (error) {
+      setCheckoutMessage(error instanceof Error ? error.message : billingText.failed);
+      setCheckoutPlan("");
+    }
   };
 
   const handlePptxFileChange = async (file: File | null) => {
@@ -1469,8 +1542,10 @@ function App() {
         </div>
 
         <div className="pricing-grid">
-          {pricingPlans.map((plan) => {
+          {pricingPlans.map((plan, index) => {
             const isFeatured = "featured" in plan && plan.featured;
+            const planId = pricingPlanIds[index] || pricingPlanIds[0];
+            const isCheckingOut = checkoutPlan === planId;
             return (
               <article className={`pricing-card ${isFeatured ? "featured" : ""}`} key={plan.name}>
                 {isFeatured && <span className="plan-badge">{ui.recommended}</span>}
@@ -1487,13 +1562,19 @@ function App() {
                     </li>
                   ))}
                 </ul>
-                <button className={isFeatured ? "primary-button wide" : "outline-button"} type="button">
-                  {plan.cta}
+                <button
+                  className={isFeatured ? "primary-button wide" : "outline-button"}
+                  type="button"
+                  onClick={() => void startCheckout(planId)}
+                  disabled={isCheckingOut}
+                >
+                  {isCheckingOut ? billingText.paying : plan.cta}
                 </button>
               </article>
             );
           })}
         </div>
+        {checkoutMessage && <p className="billing-message">{checkoutMessage}</p>}
       </section>
 
       <section className="trust-section" id="privacy">
