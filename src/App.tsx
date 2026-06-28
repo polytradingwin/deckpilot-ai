@@ -144,17 +144,17 @@ const localizedContent = {
         price: "$2.99",
         credits: "75 credits",
         detail: "约 15 页",
-        features: ["顶级 AI 引擎", "即时下载 .pptx 文件", "无需注册账号"],
+        features: ["顶级 AI 引擎", "即时下载 .pptx 文件", "邮箱登录后可用"],
         cta: "立即使用",
       },
       {
-        name: "包月订阅",
-        note: "每月大型 PPT 制作专属",
+        name: "月度额度包",
+        note: "适合每月多次 PPT 制作",
         price: "$19.99",
         credits: "600 credits",
         detail: "约 120 页",
-        features: ["credits 用不完持续累积", "品牌风格记忆", "需要更多 credits 可加购"],
-        cta: "订阅",
+        features: ["一次性购买 credits", "购买后立即到账", "需要更多 credits 可加购"],
+        cta: "购买",
         featured: true,
       },
       {
@@ -163,8 +163,8 @@ const localizedContent = {
         price: "$99.99",
         credits: "3500 credits",
         detail: "约 700 页",
-        features: ["团队协作席位", "优先生成队列", "专属模板资产库"],
-        cta: "联系开通",
+        features: ["适合高频生成", "优先生成队列", "专属模板资产库"],
+        cta: "购买",
       },
     ],
     qualityItems: [
@@ -216,7 +216,7 @@ const localizedContent = {
       },
       {
         q: "支付和账号怎么处理？",
-        a: "页面保留了价格、登录和订阅入口。等支付系统确定后，可以把这些入口连接到真实服务。",
+        a: "当前使用 Stripe Checkout 处理付款。购买 credits 后会自动入账；生成 PPT 会按页数扣除 credits。",
       },
     ],
     ui: {
@@ -278,10 +278,10 @@ const localizedContent = {
       before: "使用前",
       after: "使用后",
       galleryLabel: "PPT 样例",
-      pricingTitle: "按次付费，或订阅更高额度",
+      pricingTitle: "按次付费，或购买更高额度",
       recommended: "首选推荐",
       trustTitle: "为商业材料准备的隐私边界",
-      trustBody: "页面已按后续生产化接入预留隐私说明、登录入口和文件上传边界。真实服务上线时，文件解析、生成记录和支付都应接入独立权限控制。",
+      trustBody: "DeckEvo 使用邮箱登录、服务端存储、第三方 AI 生成和 Stripe 支付。上传敏感材料前，请确认你有权把这些内容交给外部 AI 和云服务处理。",
       filePermission: "文件级权限",
       privateHistory: "私有生成记录",
       multilingual: "多语言输出",
@@ -290,7 +290,7 @@ const localizedContent = {
       close: "关闭",
       email: "邮箱",
       creditBalance: "Credit 余额",
-      subscription: "订阅",
+      subscription: "计费方式",
       payAsYouGo: "按次付费",
       upgradeCopy: "升级包月后，你将获得更高额度和后续专属模板能力。",
       viewPricing: "查看价格",
@@ -406,17 +406,17 @@ const localizedContent = {
         price: "$2.99",
         credits: "75 credits",
         detail: "About 15 slides",
-        features: ["Top-tier AI engine", "Instant .pptx download", "No account setup required"],
+        features: ["Top-tier AI engine", "Instant .pptx download", "Email login required"],
         cta: "Start now",
       },
       {
-        name: "Monthly",
-        note: "Dedicated capacity for recurring PPT work",
+        name: "Monthly pack",
+        note: "For recurring PPT work during the month",
         price: "$19.99",
         credits: "600 credits",
         detail: "About 120 slides",
-        features: ["Unused credits keep rolling", "Brand style memory", "Add credits when needed"],
-        cta: "Subscribe",
+        features: ["One-time credit purchase", "Credits added after payment", "Add more credits when needed"],
+        cta: "Buy credits",
         featured: true,
       },
       {
@@ -425,8 +425,8 @@ const localizedContent = {
         price: "$99.99",
         credits: "3500 credits",
         detail: "About 700 slides",
-        features: ["Team seats", "Priority generation queue", "Dedicated template library"],
-        cta: "Contact us",
+        features: ["For frequent generation", "Priority generation queue", "Dedicated template library"],
+        cta: "Buy credits",
       },
     ],
     qualityItems: [
@@ -478,7 +478,7 @@ const localizedContent = {
       },
       {
         q: "How do payment and accounts work?",
-        a: "The page already includes pricing, login, and subscription entry points. These can connect to payment once the billing system is finalized.",
+        a: "Payments are processed with Stripe Checkout. Purchased credits are added automatically, and PPT generation deducts credits based on slide count.",
       },
     ],
     ui: {
@@ -540,10 +540,10 @@ const localizedContent = {
       before: "Before",
       after: "After",
       galleryLabel: "PPT examples",
-      pricingTitle: "Pay once, or subscribe for higher capacity",
+      pricingTitle: "Pay once, or buy higher capacity",
       recommended: "Recommended",
       trustTitle: "Privacy boundaries for business material",
-      trustBody: "The page is prepared for production-grade privacy notices, login, and file upload boundaries. When the full service is live, file parsing, generation history, and payment should use independent access controls.",
+      trustBody: "DeckEvo uses email login, server-side storage, third-party AI generation, and Stripe payments. Before uploading sensitive material, confirm you are allowed to process it with external AI and cloud services.",
       filePermission: "File-level permissions",
       privateHistory: "Private generation history",
       multilingual: "Multilingual output",
@@ -552,7 +552,7 @@ const localizedContent = {
       close: "Close",
       email: "Email",
       creditBalance: "Credit balance",
-      subscription: "Subscription",
+      subscription: "Billing",
       payAsYouGo: "Pay as you go",
       upgradeCopy: "Upgrade to monthly for higher credits and dedicated template capabilities later.",
       viewPricing: "View pricing",
@@ -600,7 +600,7 @@ const localizedContent = {
 const policyContent: Record<PolicyPage, { title: string; updated: string; sections: Array<{ heading: string; body: string }> }> = {
   terms: {
     title: "Terms of Service",
-    updated: "Last updated: June 4, 2026",
+    updated: "Last updated: June 28, 2026",
     sections: [
       {
         heading: "Service",
@@ -611,12 +611,24 @@ const policyContent: Record<PolicyPage, { title: string; updated: string; sectio
         body: "A verified email login is used to keep your generation history, quota, and downloads connected to your account. You are responsible for activity under your email session.",
       },
       {
+        heading: "Payments and Credits",
+        body: "Paid credit packs are processed through Stripe Checkout. Credits are added after successful payment and are consumed when PPT generation jobs are accepted or completed according to the displayed product rules. Credit packs are one-time purchases unless a separate subscription product is clearly offered.",
+      },
+      {
+        heading: "Your Content",
+        body: "You keep your rights in the materials you upload. By using the service, you allow DeckEvo and its service providers to process those materials only as needed to generate, store, deliver, secure, and support your presentations.",
+      },
+      {
         heading: "Generated Output",
-        body: "AI output can contain mistakes. You should review all generated slides, facts, charts, and recommendations before using them in business, academic, legal, financial, or public settings.",
+        body: "Generated slides may contain mistakes, omissions, design defects, or inaccurate facts. You should review all generated slides, facts, charts, and recommendations before using them in business, academic, legal, financial, medical, or public settings.",
       },
       {
         heading: "Acceptable Use",
-        body: "Do not upload illegal, infringing, confidential third-party, malicious, or abusive content. We may restrict access when usage threatens the service, other users, or our infrastructure.",
+        body: "Do not upload illegal, infringing, confidential third-party, malicious, regulated, abusive, or harmful content. We may restrict access when usage threatens the service, other users, payment partners, or our infrastructure.",
+      },
+      {
+        heading: "Service Changes",
+        body: "DeckEvo is an evolving product. Features, models, pricing, credit rules, and output quality may change. We will try to avoid disrupting paid usage, but we may suspend abusive or risky activity.",
       },
       {
         heading: "Contact",
@@ -626,52 +638,170 @@ const policyContent: Record<PolicyPage, { title: string; updated: string; sectio
   },
   privacy: {
     title: "Privacy Policy",
-    updated: "Last updated: June 4, 2026",
+    updated: "Last updated: June 28, 2026",
     sections: [
       {
         heading: "Data We Process",
-        body: "We process your email address, uploaded files, prompts, generated decks, usage records, and technical request data so the product can generate PPT files, store history, and manage quota.",
+        body: "We process your email address, uploaded files, prompts, generated decks, generation history, credit usage, payment status, and technical request data so the product can generate PPT files, store history, manage quota, and support the service.",
       },
       {
-        heading: "AI and Storage Providers",
-        body: "Your content may be sent to configured AI providers for generation and to storage/database providers for file delivery and history persistence. We use this data to operate the product, not to sell personal information.",
+        heading: "Service Providers",
+        body: "Your content may be sent to configured AI providers for generation and to storage, database, email, payment, and infrastructure providers for file delivery, history persistence, login, billing, and security. Current provider categories include AI generation, Supabase storage/database, Resend email, Stripe payments, Canva integration, and hosting infrastructure.",
+      },
+      {
+        heading: "Payments",
+        body: "Card details are handled by Stripe Checkout. DeckEvo does not store full card numbers. We store payment status, Stripe session identifiers, and credit records so purchases can be fulfilled and audited.",
       },
       {
         heading: "Retention",
-        body: "Generation records and files are retained so you can download previous decks. You can request deletion by contacting service@deckevo.com from the account email.",
+        body: "Generation records and files are retained so you can download previous decks and so we can support refunds, abuse prevention, and payment reconciliation. You can request deletion by contacting service@deckevo.com from the account email.",
       },
       {
         heading: "Security",
         body: "We use account sessions, server-side storage, and access checks to protect generated files. No online service can guarantee absolute security, so avoid uploading materials you are not allowed to share with an AI service.",
       },
       {
+        heading: "International Processing",
+        body: "Because our providers may operate in multiple regions, your information may be processed outside your country or region. Do not upload materials that your organization prohibits from being processed by external AI or cloud providers.",
+      },
+      {
         heading: "Contact",
-        body: "Privacy requests can be sent to service@deckevo.com.",
+        body: "Privacy, access, correction, export, or deletion requests can be sent to service@deckevo.com.",
       },
     ],
   },
   refund: {
     title: "Refund Policy",
-    updated: "Last updated: June 4, 2026",
+    updated: "Last updated: June 28, 2026",
     sections: [
       {
-        heading: "Current Status",
-        body: "Payment is not live yet, so there are no paid purchases to refund at this stage. Trial credits are provided for product testing and may change before commercial launch.",
+        heading: "Paid Credits",
+        body: "DeckEvo sells prepaid credits for PPT generation. Credits are added after successful Stripe payment and are consumed when generation jobs are accepted or completed according to the product rules shown in the app.",
       },
       {
-        heading: "After Payment Launch",
-        body: "When paid plans are enabled, refund requests should be submitted within 7 days of purchase. We will review failed generations, duplicate charges, and cases where credits were charged but no downloadable PPT was produced.",
+        heading: "Refund Window",
+        body: "Refund requests should be submitted within 7 days of purchase. We will review failed generations, duplicate charges, accidental duplicate purchases, and cases where credits were charged but no downloadable PPT was produced.",
       },
       {
         heading: "Non-refundable Cases",
-        body: "Downloaded and successfully generated decks, used credits, custom work, or abuse of the service may not be refundable unless required by applicable law.",
+        body: "Downloaded and successfully generated decks, used credits, custom work, excessive use, or abuse of the service may not be refundable unless required by applicable law.",
+      },
+      {
+        heading: "Processing",
+        body: "Approved refunds are returned through Stripe to the original payment method when possible. Bank or card network processing time may vary.",
       },
       {
         heading: "Contact",
-        body: "Refund questions can be sent to service@deckevo.com with your account email and order reference once payment is live.",
+        body: "Refund questions can be sent to service@deckevo.com with your account email, payment date, and Stripe receipt or order reference.",
       },
     ],
   },
+};
+
+const zhPolicyContent: typeof policyContent = {
+  terms: {
+    title: "服务条款",
+    updated: "最后更新：2026 年 6 月 28 日",
+    sections: [
+      {
+        heading: "服务内容",
+        body: "DeckEvo 帮助用户把上传的 PowerPoint 文件、文稿、大纲和相关指令转化为可编辑的演示文稿文件。你需要确认上传材料属于你本人，或你已经取得合法使用授权。",
+      },
+      {
+        heading: "账户",
+        body: "DeckEvo 使用邮箱验证码登录，用于绑定生成历史、额度和下载记录。你需要对自己邮箱会话下的使用行为负责。",
+      },
+      {
+        heading: "支付与 credits",
+        body: "付费额度包通过 Stripe Checkout 处理。付款成功后 credits 会自动入账，并在系统接受或完成 PPT 生成任务时按页面规则扣除。除非页面明确标注为订阅产品，当前 credits 套餐均为一次性购买。",
+      },
+      {
+        heading: "你的内容",
+        body: "你保留上传材料的相关权利。使用本服务即表示你允许 DeckEvo 及其服务提供商在生成、存储、交付、保障安全和提供支持所需范围内处理这些材料。",
+      },
+      {
+        heading: "生成结果",
+        body: "AI 生成内容可能存在错误、遗漏、排版缺陷或事实不准确。你在商业、学术、法律、金融、医疗或公开场景使用前，应自行审核所有幻灯片、事实、图表和建议。",
+      },
+      {
+        heading: "可接受使用",
+        body: "不得上传违法、侵权、未经授权的第三方机密、恶意、受监管、高风险、滥用或有害内容。如使用行为影响服务、其他用户、支付合作方或基础设施安全，我们可能限制访问。",
+      },
+      {
+        heading: "服务变更",
+        body: "DeckEvo 仍在持续迭代。功能、模型、价格、credits 规则和输出质量可能调整。我们会尽量避免影响已付费使用，但可能暂停滥用或高风险行为。",
+      },
+      {
+        heading: "联系",
+        body: "服务问题可联系 service@deckevo.com。",
+      },
+    ],
+  },
+  privacy: {
+    title: "隐私政策",
+    updated: "最后更新：2026 年 6 月 28 日",
+    sections: [
+      {
+        heading: "我们处理的数据",
+        body: "我们会处理你的邮箱地址、上传文件、提示词、生成的 PPT、生成历史、credits 使用记录、支付状态和技术请求数据，用于生成 PPT、保存历史、管理额度和提供服务支持。",
+      },
+      {
+        heading: "服务提供商",
+        body: "你的内容可能会发送给配置的 AI 服务商用于生成，并发送给存储、数据库、邮件、支付和基础设施服务商用于文件交付、历史记录、登录、计费和安全。目前涉及的服务类别包括 AI 生成、Supabase 存储/数据库、Resend 邮件、Stripe 支付、Canva 集成和托管基础设施。",
+      },
+      {
+        heading: "支付",
+        body: "银行卡信息由 Stripe Checkout 处理。DeckEvo 不保存完整银行卡号。我们会保存支付状态、Stripe session 标识和 credits 记录，用于完成入账和审计。",
+      },
+      {
+        heading: "保留与删除",
+        body: "生成记录和文件会被保留，以便你下载历史文件、申请退款、处理滥用和核对支付。你可以使用账户邮箱联系 service@deckevo.com 申请删除。",
+      },
+      {
+        heading: "安全",
+        body: "我们使用账户会话、服务端存储和访问校验来保护生成文件。任何在线服务都不能保证绝对安全，请不要上传你所在组织禁止交给外部 AI 或云服务处理的材料。",
+      },
+      {
+        heading: "跨境处理",
+        body: "由于服务提供商可能在多个地区运营，你的信息可能会在你所在国家或地区之外被处理。",
+      },
+      {
+        heading: "联系",
+        body: "隐私、访问、更正、导出或删除请求可发送至 service@deckevo.com。",
+      },
+    ],
+  },
+  refund: {
+    title: "退款政策",
+    updated: "最后更新：2026 年 6 月 28 日",
+    sections: [
+      {
+        heading: "付费 credits",
+        body: "DeckEvo 销售用于 PPT 生成的预付 credits。Stripe 付款成功后 credits 会入账，并在系统接受或完成生成任务时按产品规则扣除。",
+      },
+      {
+        heading: "退款窗口",
+        body: "退款请求应在购买后 7 天内提交。我们会审核生成失败、重复扣款、误重复购买，以及已扣 credits 但没有可下载 PPT 的情况。",
+      },
+      {
+        heading: "不退款情形",
+        body: "已成功生成并下载的 PPT、已使用 credits、定制工作、过度使用或滥用服务的情况，除非适用法律另有要求，可能不支持退款。",
+      },
+      {
+        heading: "处理方式",
+        body: "审核通过的退款会尽可能通过 Stripe 原路退回。银行或卡组织处理时间可能不同。",
+      },
+      {
+        heading: "联系",
+        body: "退款问题请使用账户邮箱发送至 service@deckevo.com，并提供付款日期和 Stripe 收据或订单信息。",
+      },
+    ],
+  },
+};
+
+const localizedPolicyContent: Record<UiLanguage, typeof policyContent> = {
+  zh: zhPolicyContent,
+  en: policyContent,
 };
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
@@ -752,6 +882,7 @@ function App() {
   const qualityItems = content.qualityItems;
   const beforeAfterCases = content.beforeAfterCases;
   const faqs = content.faqs;
+  const currentPolicyContent = localizedPolicyContent[uiLanguage];
   const pricingPlanIds = ["starter", "monthly", "pro"];
   const billingText =
     uiLanguage === "zh"
@@ -1621,13 +1752,13 @@ function App() {
         </div>
         <div className="footer-links">
           <button type="button" onClick={() => setLegalPage("terms")}>
-            Terms
+            {uiLanguage === "zh" ? "条款" : "Terms"}
           </button>
           <button type="button" onClick={() => setLegalPage("privacy")}>
-            Privacy
+            {uiLanguage === "zh" ? "隐私" : "Privacy"}
           </button>
           <button type="button" onClick={() => setLegalPage("refund")}>
-            Refund
+            {uiLanguage === "zh" ? "退款" : "Refund"}
           </button>
         </div>
         <a href="#top">{ui.top}</a>
@@ -1640,10 +1771,10 @@ function App() {
               <X size={18} />
             </button>
             <p className="section-kicker">DeckEvo</p>
-            <h2 id="policy-title">{policyContent[legalPage].title}</h2>
-            <small>{policyContent[legalPage].updated}</small>
+            <h2 id="policy-title">{currentPolicyContent[legalPage].title}</h2>
+            <small>{currentPolicyContent[legalPage].updated}</small>
             <div className="policy-sections">
-              {policyContent[legalPage].sections.map((section) => (
+              {currentPolicyContent[legalPage].sections.map((section) => (
                 <section key={section.heading}>
                   <h3>{section.heading}</h3>
                   <p>{section.body}</p>
