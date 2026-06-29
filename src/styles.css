@@ -915,6 +915,30 @@ main {
   gap: 10px;
 }
 
+.mindmap-result-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(153, 217, 176, 0.35);
+  border-radius: 8px;
+  background: rgba(153, 217, 176, 0.08);
+}
+
+.mindmap-result-card strong {
+  color: #dff6e8;
+}
+
+.mindmap-result-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mindmap-result-actions .download-button {
+  min-height: 48px;
+}
+
 .mindmap-export-actions a[aria-disabled="true"] {
   pointer-events: none;
   opacity: 0.55;
@@ -1893,6 +1917,10 @@ main {
   .option-grid.two,
   .settings-grid,
   .preview-pane {
+    grid-template-columns: 1fr;
+  }
+
+  .mindmap-result-actions {
     grid-template-columns: 1fr;
   }
 

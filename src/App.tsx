@@ -900,8 +900,10 @@ function App() {
           mindmapPrompt: "粘贴文稿，生成动态脑图汇报",
           mindmapGenerate: "生成脑图",
           mindmapRegenerate: "重新生成脑图",
+          openMindMap: "查看动态脑图",
           exportSummary: "导出一页摘要 PDF",
           exportFull: "导出完整内容 PDF",
+          resultReady: "脑图已生成，可以查看或导出。",
           recentMindMaps: "最近脑图",
           nodes: "节点",
           mindmapPreview: "MindMap preview",
@@ -916,8 +918,10 @@ function App() {
           mindmapPrompt: "Paste source text for a dynamic mindmap report",
           mindmapGenerate: "Generate MindMap",
           mindmapRegenerate: "Regenerate MindMap",
+          openMindMap: "Open dynamic MindMap",
           exportSummary: "Export one-page summary PDF",
           exportFull: "Export full report PDF",
+          resultReady: "MindMap is ready. You can view or export it.",
           recentMindMaps: "Recent MindMaps",
           nodes: "nodes",
           mindmapPreview: "MindMap preview",
@@ -1711,11 +1715,47 @@ function App() {
                 </div>
 
                 {generationError && <p className={`status-message ${generated ? "complete" : "pending"}`}>{generationError}</p>}
+                {productMode === "mindmap" && mindMapRecord && mindMapSpec && (
+                  <div className="mindmap-result-card">
+                    <strong>{modeText.resultReady}</strong>
+                    <div className="mindmap-result-actions">
+                      <a
+                        className="download-button secondary-export"
+                        href="#mindmap-preview-pane"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          document.getElementById("mindmap-preview-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        <Eye size={17} />
+                        {modeText.openMindMap}
+                      </a>
+                      <a
+                        className="download-button"
+                        href={apiPath(`/api/mindmaps/${mindMapRecord.id}/summary`)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download size={17} />
+                        {modeText.exportSummary}
+                      </a>
+                      <a
+                        className="download-button secondary-export"
+                        href={apiPath(`/api/mindmaps/${mindMapRecord.id}/full`)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download size={17} />
+                        {modeText.exportFull}
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          <aside className="preview-pane" aria-label={ui.previewLabel}>
+          <aside className="preview-pane" id="mindmap-preview-pane" aria-label={ui.previewLabel}>
             <div className="preview-topline">
               <span>{productMode === "mindmap" ? modeText.mindmapPreview : "Deck preview"}</span>
               <strong>{generated ? "Ready" : isGenerating ? "Generating" : "Draft"}</strong>
