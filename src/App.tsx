@@ -858,6 +858,7 @@ function App() {
   const [mindMapSpec, setMindMapSpec] = useState<MindMapSpec | null>(null);
   const [mindMapRecord, setMindMapRecord] = useState<MindMapGenerationRecord | null>(null);
   const [recentMindMaps, setRecentMindMaps] = useState<MindMapGenerationRecord[]>([]);
+  const [mindMapStageOpen, setMindMapStageOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -1724,7 +1725,7 @@ function App() {
                         href="#mindmap-preview-pane"
                         onClick={(event) => {
                           event.preventDefault();
-                          document.getElementById("mindmap-preview-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          setMindMapStageOpen(true);
                         }}
                       >
                         <Eye size={17} />
@@ -2168,6 +2169,15 @@ function App() {
               <p className="auth-footnote">{ui.authFootnote}</p>
             )}
           </div>
+        </div>
+      )}
+
+      {mindMapStageOpen && mindMapSpec && (
+        <div className="mindmap-stage-backdrop" role="dialog" aria-modal="true" aria-label={modeText.mindmapPreview}>
+          <button className="mindmap-stage-close" type="button" onClick={() => setMindMapStageOpen(false)} aria-label={ui.close}>
+            <X size={22} />
+          </button>
+          <MindMapPresenter spec={mindMapSpec} immersive />
         </div>
       )}
     </main>
