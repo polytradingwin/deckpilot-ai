@@ -1,4 +1,4 @@
-import { useMemo, useState, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import type { MindMapNode, MindMapSpec } from "../shared/mindmap";
 
 type MindMapPresenterProps = {
@@ -27,11 +27,18 @@ const stage = {
 
 export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterProps) {
   const model = useMemo(() => buildMapModel(spec), [spec]);
-  const [activeIndex, setActiveIndex] = useState(Math.min(1, model.items.length - 1));
+  const [activeIndex, setActiveIndex] = useState(0);
   const [zoom, setZoom] = useState(immersive ? 0.86 : 0.62);
+  const [viewport, setViewport] = useState({
+    width: immersive ? window.innerWidth : 720,
+    height: immersive ? Math.max(520, window.innerHeight - 88) : 520,
+  });
+  const wheelBuffer = useRef(0);
+  const wheelLockUntil = useRef(0);
+  const wheelResetTimer = useRef<number | null>(null);
   const active = model.items[activeIndex] || model.items[0];
-  const viewportHeight = immersive ? 760 : 520;
-  const viewportWidth = immersive ? 1280 : 720;
+  const viewportHeight = viewport.height;
+  const viewportWidth = viewport.width;
   const translateX = viewportWidth / 2 - active.x * zoom;
   const translateY = viewportHeight / 2 - active.y * zoom;
 
@@ -39,10 +46,58 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
     setActiveIndex((current) => clamp(current + direction, 0, model.items.length - 1));
   };
 
+  useEffect(() => {
+    if (!immersive) return;
+
+    const syncViewport = () => {
+      setViewport({ width: window.innerWidth, height: Math.max(520, window.innerHeight - 88) });
+    };
+
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    return () => window.removeEventListener("resize", syncViewport);
+  }, [immersive]);
+
+  useEffect(() => {
+    setActiveIndex((current) => clamp(current, 0, model.items.length - 1));
+  }, [model.items.length]);
+
+  useEffect(() => {
+    if (!immersive) return;
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (["ArrowDown", "ArrowRight", "PageDown", " "].includes(event.key)) {
+        event.preventDefault();
+        go(1);
+      }
+      if (["ArrowUp", "ArrowLeft", "PageUp"].includes(event.key)) {
+        event.preventDefault();
+        go(-1);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [immersive, model.items.length]);
+
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (Math.abs(event.deltaY) < 12) return;
+    if (Math.abs(event.deltaY) < 2) return;
     event.preventDefault();
-    go(event.deltaY > 0 ? 1 : -1);
+
+    const now = window.performance.now();
+    if (now < wheelLockUntil.current) return;
+
+    wheelBuffer.current += event.deltaY;
+    if (wheelResetTimer.current) window.clearTimeout(wheelResetTimer.current);
+    wheelResetTimer.current = window.setTimeout(() => {
+      wheelBuffer.current = 0;
+    }, 180);
+
+    if (Math.abs(wheelBuffer.current) < 70) return;
+
+    go(wheelBuffer.current > 0 ? 1 : -1);
+    wheelBuffer.current = 0;
+    wheelLockUntil.current = now + 260;
   };
 
   return (

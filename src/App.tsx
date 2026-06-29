@@ -902,6 +902,7 @@ function App() {
           mindmapGenerate: "生成脑图",
           mindmapRegenerate: "重新生成脑图",
           openMindMap: "查看动态脑图",
+          presentMindMap: "全屏汇报",
           exportSummary: "导出一页摘要 PDF",
           exportFull: "导出完整内容 PDF",
           resultReady: "脑图已生成，可以查看或导出。",
@@ -920,6 +921,7 @@ function App() {
           mindmapGenerate: "Generate MindMap",
           mindmapRegenerate: "Regenerate MindMap",
           openMindMap: "Open dynamic MindMap",
+          presentMindMap: "Present fullscreen",
           exportSummary: "Export one-page summary PDF",
           exportFull: "Export full report PDF",
           resultReady: "MindMap is ready. You can view or export it.",
@@ -997,6 +999,23 @@ function App() {
     const timer = window.setTimeout(() => setResendCountdown((current) => Math.max(0, current - 1)), 1000);
     return () => window.clearTimeout(timer);
   }, [authStep, resendCountdown]);
+
+  useEffect(() => {
+    if (!mindMapStageOpen) return;
+
+    document.body.classList.add("mindmap-presenting");
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMindMapStageOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.classList.remove("mindmap-presenting");
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mindMapStageOpen]);
 
   const refreshSession = async () => {
     try {
@@ -1725,11 +1744,12 @@ function App() {
                         href="#mindmap-preview-pane"
                         onClick={(event) => {
                           event.preventDefault();
+                          void document.documentElement.requestFullscreen?.().catch(() => undefined);
                           setMindMapStageOpen(true);
                         }}
                       >
                         <Eye size={17} />
-                        {modeText.openMindMap}
+                        {modeText.presentMindMap}
                       </a>
                       <a
                         className="download-button"
@@ -2174,7 +2194,15 @@ function App() {
 
       {mindMapStageOpen && mindMapSpec && (
         <div className="mindmap-stage-backdrop" role="dialog" aria-modal="true" aria-label={modeText.mindmapPreview}>
-          <button className="mindmap-stage-close" type="button" onClick={() => setMindMapStageOpen(false)} aria-label={ui.close}>
+          <button
+            className="mindmap-stage-close"
+            type="button"
+            onClick={() => {
+              setMindMapStageOpen(false);
+              if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
+            }}
+            aria-label={ui.close}
+          >
             <X size={22} />
           </button>
           <MindMapPresenter spec={mindMapSpec} immersive />
