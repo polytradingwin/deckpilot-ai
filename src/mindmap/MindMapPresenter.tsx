@@ -36,7 +36,9 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const wheelBuffer = useRef(0);
   const wheelLockUntil = useRef(0);
   const wheelResetTimer = useRef<number | null>(null);
-  const active = model.items[activeIndex] || model.items[0];
+  const visibleItems = model.items.slice(0, activeIndex + 1);
+  const visibleIds = new Set(visibleItems.map((item) => item.id));
+  const active = visibleItems[visibleItems.length - 1] || model.items[0];
   const viewportHeight = viewport.height;
   const viewportWidth = viewport.width;
   const translateX = viewportWidth / 2 - active.x * zoom;
@@ -124,7 +126,7 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
           }}
         >
           <svg className="mindmap-links" viewBox={`0 0 ${stage.width} ${model.height}`} aria-hidden="true">
-            {model.links.map((link) => {
+            {model.links.filter((link) => visibleIds.has(link.from) && visibleIds.has(link.to)).map((link) => {
               const from = model.byId.get(link.from);
               const to = model.byId.get(link.to);
               if (!from || !to) return null;
@@ -142,7 +144,7 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
             })}
           </svg>
 
-          {model.items.map((item, index) => {
+          {visibleItems.map((item, index) => {
             const size = nodeSize(item);
             const isActive = index === activeIndex;
             return (

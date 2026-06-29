@@ -989,6 +989,9 @@ main {
   stroke: rgba(76, 91, 98, 0.34);
   stroke-width: 5;
   stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: mindmap-line-in 420ms ease both;
   transition: stroke 180ms ease, stroke-width 180ms ease;
 }
 
@@ -1055,6 +1058,7 @@ main {
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 18px 42px rgba(49, 61, 64, 0.12);
   text-align: center;
+  animation: mindmap-node-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: transform 240ms ease, border-color 240ms ease, box-shadow 240ms ease, background 240ms ease;
 }
 
@@ -1183,6 +1187,24 @@ main {
 
 body.mindmap-presenting {
   overflow: hidden;
+}
+
+@keyframes mindmap-node-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mindmap-line-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .history-list {
