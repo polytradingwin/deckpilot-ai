@@ -9,7 +9,9 @@ import {
   useSupabaseStore,
 } from "./supabaseStore";
 
-const mindMapStoreDir = path.resolve(process.cwd(), "output/generated");
+const mindMapStoreDir = process.env.MINDMAP_STORE_DIR
+  ? path.resolve(process.env.MINDMAP_STORE_DIR)
+  : path.resolve(process.cwd(), ".runtime");
 
 type MindMapGenerationRow = {
   id: string;
