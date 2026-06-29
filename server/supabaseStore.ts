@@ -1,5 +1,6 @@
 import type { GenerationJobRecord, GenerationJobStatus, GenerationRecord } from "./store";
 import type { UserAccount } from "./auth";
+import type { MindMapGenerationRecord } from "../src/shared/mindmap";
 
 type SupabaseLoginResult = {
   user: UserAccount;
@@ -8,6 +9,10 @@ type SupabaseLoginResult = {
 };
 
 type SupabaseGenerationRecord = GenerationRecord & {
+  storedFilename: string;
+};
+
+type SupabaseMindMapGenerationRecord = MindMapGenerationRecord & {
   storedFilename: string;
 };
 
@@ -83,8 +88,41 @@ export async function supabaseFindGenerationJob(userId: string, id: string) {
   return result.job;
 }
 
+export async function supabaseSaveMindMapGeneration(record: MindMapGenerationRecord & { userId: string; storedFilename: string }) {
+  await callSupabaseMindMapBackend<{ ok: boolean }>("save_mindmap_generation", {
+    id: record.id,
+    userId: record.userId,
+    title: record.title,
+    storedFilename: record.storedFilename,
+    createdAt: record.createdAt,
+    audience: record.audience,
+    deliveryMode: record.deliveryMode,
+    style: record.style,
+    nodeCount: record.nodeCount,
+    size: record.size,
+    creditCost: record.creditCost,
+  });
+}
+
+export async function supabaseListMindMapGenerations(userId: string) {
+  const result = await callSupabaseMindMapBackend<{ records: MindMapGenerationRecord[] }>("list_mindmap_generations", { userId });
+  return result.records || [];
+}
+
+export async function supabaseFindMindMapGeneration(userId: string, id: string) {
+  const result = await callSupabaseMindMapBackend<{ record: SupabaseMindMapGenerationRecord | null }>("find_mindmap_generation", {
+    userId,
+    id,
+  });
+  return result.record;
+}
+
 async function callSupabaseBackend<T>(action: string, payload: Record<string, unknown>): Promise<T> {
   return callSupabaseRpc<T>("deckpilot_backend", { action, payload, app_secret: getSupabaseSecret() });
+}
+
+async function callSupabaseMindMapBackend<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+  return callSupabaseRpc<T>("deckpilot_mindmap_backend", { action, payload, app_secret: getSupabaseSecret() });
 }
 
 async function callSupabaseAddCredits<T>(payload: Record<string, unknown>): Promise<T> {

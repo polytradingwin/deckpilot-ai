@@ -6,8 +6,16 @@ const storeDir = path.resolve(process.cwd(), "output/generated");
 const bucketName = process.env.SUPABASE_STORAGE_BUCKET || "deckpilot-pptx";
 
 export async function savePptxFile(storedFilename: string, file: Buffer) {
+  await saveGeneratedFile(storedFilename, file, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+}
+
+export async function readPptxFile(storedFilename: string) {
+  return readGeneratedFile(storedFilename);
+}
+
+export async function saveGeneratedFile(storedFilename: string, file: Buffer, contentType = "application/octet-stream") {
   if (useSupabaseStore()) {
-    await uploadToSupabaseStorage(storedFilename, file);
+    await uploadToSupabaseStorage(storedFilename, file, contentType);
     return;
   }
 
@@ -16,7 +24,7 @@ export async function savePptxFile(storedFilename: string, file: Buffer) {
   await fs.writeFile(target, file);
 }
 
-export async function readPptxFile(storedFilename: string) {
+export async function readGeneratedFile(storedFilename: string) {
   if (useSupabaseStore()) {
     return downloadFromSupabaseStorage(storedFilename);
   }
@@ -59,13 +67,13 @@ export async function createSignedPptxUpload(storedFilename: string) {
   };
 }
 
-async function uploadToSupabaseStorage(storedFilename: string, file: Buffer) {
+async function uploadToSupabaseStorage(storedFilename: string, file: Buffer, contentType: string) {
   const response = await fetch(`${getSupabaseUrl()}/storage/v1/object/${bucketName}/${storedFilename}`, {
     method: "POST",
     headers: {
       apikey: getSupabaseAnonKey(),
       Authorization: `Bearer ${getSupabaseAnonKey()}`,
-      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "Content-Type": contentType,
       "x-upsert": "false",
     },
     body: new Uint8Array(file),

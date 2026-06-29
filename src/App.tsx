@@ -23,12 +23,15 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { MindMapPresenter } from "./mindmap/MindMapPresenter";
+import type { MindMapGenerationRecord, MindMapSpec } from "./shared/mindmap";
 
 type SourceType = "ppt" | "outline";
 type Purpose = "fundraising" | "sales" | "training" | "report";
 type Style = "consulting" | "product" | "brand" | "academic";
 type DeliveryMode = "presenting" | "reading";
 type PolicyPage = "terms" | "privacy" | "refund";
+type ProductMode = "ppt" | "mindmap";
 
 type Option<T extends string> = {
   id: T;
@@ -836,6 +839,7 @@ function App() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh");
   const content = localizedContent[uiLanguage];
   const { ui } = content;
+  const [productMode, setProductMode] = useState<ProductMode>("ppt");
   const [step, setStep] = useState(1);
   const [source, setSource] = useState<SourceType>("outline");
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("presenting");
@@ -851,6 +855,9 @@ function App() {
   const [sourceSlideCount, setSourceSlideCount] = useState<number | null>(null);
   const [generationId, setGenerationId] = useState("");
   const [recentGenerations, setRecentGenerations] = useState<GenerationRecord[]>([]);
+  const [mindMapSpec, setMindMapSpec] = useState<MindMapSpec | null>(null);
+  const [mindMapRecord, setMindMapRecord] = useState<MindMapGenerationRecord | null>(null);
+  const [recentMindMaps, setRecentMindMaps] = useState<MindMapGenerationRecord[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -884,6 +891,42 @@ function App() {
   const faqs = content.faqs;
   const currentPolicyContent = localizedPolicyContent[uiLanguage];
   const pricingPlanIds = ["starter", "monthly", "pro"];
+  const modeText =
+    uiLanguage === "zh"
+      ? {
+          ppt: "PPT 生成",
+          mindmap: "动态脑图汇报",
+          mindmapIntro: "粘贴文稿后，AI 会拆成标准 JSON 并生成动态脑图演示。",
+          mindmapPrompt: "粘贴文稿，生成动态脑图汇报",
+          mindmapGenerate: "生成脑图",
+          mindmapRegenerate: "重新生成脑图",
+          exportSummary: "导出一页摘要 PDF",
+          exportFull: "导出完整内容 PDF",
+          recentMindMaps: "最近脑图",
+          nodes: "节点",
+          mindmapPreview: "MindMap preview",
+          mindmapStepHeads: ["输入要拆解的文稿", "这份脑图是给人讲，还是给人看？", "生成动态脑图汇报"],
+          mindmapSteps: ["输入文稿", "汇报对象", "生成脑图"],
+          mindmapNeedPrompt: "请先输入文稿内容。",
+        }
+      : {
+          ppt: "PPT generator",
+          mindmap: "Dynamic MindMap report",
+          mindmapIntro: "Paste source text and AI will turn it into standard JSON for a dynamic mindmap report.",
+          mindmapPrompt: "Paste source text for a dynamic mindmap report",
+          mindmapGenerate: "Generate MindMap",
+          mindmapRegenerate: "Regenerate MindMap",
+          exportSummary: "Export one-page summary PDF",
+          exportFull: "Export full report PDF",
+          recentMindMaps: "Recent MindMaps",
+          nodes: "nodes",
+          mindmapPreview: "MindMap preview",
+          mindmapStepHeads: ["Enter source material", "Is this for presenting or reading?", "Generate dynamic MindMap report"],
+          mindmapSteps: ["Source text", "Audience", "Generate"],
+          mindmapNeedPrompt: "Please enter source material first.",
+        };
+  const currentStepHeads = productMode === "mindmap" ? modeText.mindmapStepHeads : ui.stepHeads;
+  const currentSteps = productMode === "mindmap" ? modeText.mindmapSteps : ui.steps;
   const billingText =
     uiLanguage === "zh"
       ? {
@@ -959,12 +1002,15 @@ function App() {
       if (payload.user) {
         setEmail(payload.user.email);
         void refreshGenerations();
+        void refreshMindMaps();
       } else {
         setRecentGenerations([]);
+        setRecentMindMaps([]);
       }
     } catch {
       setUser(null);
       setRecentGenerations([]);
+      setRecentMindMaps([]);
     }
   };
 
@@ -1028,6 +1074,7 @@ function App() {
       setUser(payload.user);
       closeLogin();
       void refreshGenerations();
+      void refreshMindMaps();
       if (loginIntent === "generate") {
         setLoginIntent("");
         window.setTimeout(() => {
@@ -1045,8 +1092,11 @@ function App() {
     await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     setUser(null);
     setRecentGenerations([]);
+    setRecentMindMaps([]);
     setDownloadUrl("");
     setGenerationId("");
+    setMindMapSpec(null);
+    setMindMapRecord(null);
     setAccountMenuOpen(false);
     setAccountOpen(false);
   };
@@ -1126,6 +1176,11 @@ function App() {
         return;
       }
 
+      if (productMode === "mindmap") {
+        await generateMindMapReport();
+        return;
+      }
+
       if (source === "ppt" && !selectedFile) {
         throw new Error(ui.errors.needPpt);
       }
@@ -1176,6 +1231,42 @@ function App() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const generateMindMapReport = async () => {
+    const sourceText = prompt.trim();
+    if (sourceText.length < 8) {
+      throw new Error(modeText.mindmapNeedPrompt);
+    }
+
+    const response = await apiFetch("/api/generate-mindmap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: sourceText,
+        audience,
+        deliveryMode,
+        style: "business-premium",
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      record?: MindMapGenerationRecord;
+      spec?: MindMapSpec;
+      user?: UserAccount | null;
+      error?: string;
+    };
+    if (!response.ok || !payload.record || !payload.spec) {
+      if (response.status === 401) openLogin();
+      throw new Error(payload.error || ui.errors.failed);
+    }
+
+    setMindMapRecord(payload.record);
+    setMindMapSpec(payload.spec);
+    setGenerated(true);
+    setGenerationError(ui.completed);
+    if (payload.user) setUser(payload.user);
+    await refreshMindMaps();
+    await refreshSession();
   };
 
   const submitGenerationRequest = async () => {
@@ -1328,6 +1419,35 @@ function App() {
     }
   };
 
+  const refreshMindMaps = async () => {
+    try {
+      const response = await apiFetch("/api/mindmaps");
+      if (!response.ok) return;
+      const payload = (await response.json()) as { records?: MindMapGenerationRecord[] };
+      setRecentMindMaps(payload.records?.slice(0, 5) || []);
+    } catch {
+      setRecentMindMaps([]);
+    }
+  };
+
+  const loadMindMap = async (id: string) => {
+    const response = await apiFetch(`/api/mindmaps/${id}`);
+    const payload = (await response.json().catch(() => ({}))) as {
+      record?: MindMapGenerationRecord;
+      spec?: MindMapSpec;
+      error?: string;
+    };
+    if (!response.ok || !payload.record || !payload.spec) {
+      setGenerationError(payload.error || ui.errors.failed);
+      return;
+    }
+    setProductMode("mindmap");
+    setMindMapRecord(payload.record);
+    setMindMapSpec(payload.spec);
+    setGenerated(true);
+    setGenerationError(ui.completed);
+  };
+
   const downloadDeck = (url = downloadUrl, name = downloadName) => {
     if (!url) return;
     const link = document.createElement("a");
@@ -1340,6 +1460,21 @@ function App() {
 
   const scrollToGenerator = () => {
     document.getElementById("generator")?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const switchProductMode = (mode: ProductMode) => {
+    setProductMode(mode);
+    setStep(1);
+    setGenerated(false);
+    setGenerationError("");
+    if (mode === "ppt") {
+      setMindMapSpec(null);
+      setMindMapRecord(null);
+    } else {
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+      setDownloadUrl("");
+      setGenerationId("");
+    }
   };
 
   return (
@@ -1422,8 +1557,20 @@ function App() {
       </section>
 
       <section className="generator-section" id="generator" aria-label={ui.generatorLabel}>
+        <div className="product-mode-switch" aria-label="DeckEvo generation mode">
+          <button className={productMode === "ppt" ? "active" : ""} type="button" onClick={() => switchProductMode("ppt")}>
+            <Presentation size={18} />
+            {modeText.ppt}
+          </button>
+          <button className={productMode === "mindmap" ? "active" : ""} type="button" onClick={() => switchProductMode("mindmap")}>
+            <Sparkles size={18} />
+            {modeText.mindmap}
+          </button>
+        </div>
+        {productMode === "mindmap" && <p className="mode-intro">{modeText.mindmapIntro}</p>}
+
         <div className="stepper" aria-label={ui.stepsLabel}>
-          {ui.steps.map((label, index) => {
+          {currentSteps.map((label, index) => {
             const number = index + 1;
             return (
               <button
@@ -1444,7 +1591,7 @@ function App() {
             <div className="panel-heading">
               <div>
                 <p className="section-kicker">Step {step}</p>
-                <h2>{ui.stepHeads[step - 1]}</h2>
+                <h2>{currentStepHeads[step - 1]}</h2>
               </div>
               <span className="status-pill">
                 <Sparkles size={14} />
@@ -1454,35 +1601,44 @@ function App() {
 
             {step === 1 && (
               <div className="step-body">
-                <div className="option-grid two source-choice-grid">
-                  {sourceOptions.map((item) => (
-                    <SelectButton
-                      item={item}
-                      key={item.id}
-                      selected={source === item.id}
-                      onClick={() => setSource(item.id)}
-                    />
-                  ))}
-                </div>
-
-                {source === "ppt" ? (
+                {productMode === "ppt" ? (
                   <>
-                    <label className="upload-zone">
-                      <Upload size={22} />
-                      <span>{selectedFile ? selectedFile.name : ui.uploadPlaceholder}</span>
-                      <small>{selectedFile ? ui.uploadSelected : ui.uploadHelp}</small>
-                      <input
-                        aria-label={ui.uploadAria}
-                        type="file"
-                        accept=".pptx"
-                        onChange={(event) => void handlePptxFileChange(event.target.files?.[0] ?? null)}
-                      />
-                    </label>
-                    {selectedFile && <p className="format-note">{ui.formatNote}</p>}
+                    <div className="option-grid two source-choice-grid">
+                      {sourceOptions.map((item) => (
+                        <SelectButton
+                          item={item}
+                          key={item.id}
+                          selected={source === item.id}
+                          onClick={() => setSource(item.id)}
+                        />
+                      ))}
+                    </div>
+
+                    {source === "ppt" ? (
+                      <>
+                        <label className="upload-zone">
+                          <Upload size={22} />
+                          <span>{selectedFile ? selectedFile.name : ui.uploadPlaceholder}</span>
+                          <small>{selectedFile ? ui.uploadSelected : ui.uploadHelp}</small>
+                          <input
+                            aria-label={ui.uploadAria}
+                            type="file"
+                            accept=".pptx"
+                            onChange={(event) => void handlePptxFileChange(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {selectedFile && <p className="format-note">{ui.formatNote}</p>}
+                      </>
+                    ) : (
+                      <label className="prompt-field">
+                        <span>{ui.promptLabel}</span>
+                        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+                      </label>
+                    )}
                   </>
                 ) : (
                   <label className="prompt-field">
-                    <span>{ui.promptLabel}</span>
+                    <span>{modeText.mindmapPrompt}</span>
                     <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
                   </label>
                 )}
@@ -1541,7 +1697,15 @@ function App() {
                     {ui.back}
                   </button>
                   <button className="primary-button" type="button" onClick={handleGenerate} data-generate-button="true">
-                    {isGenerating ? ui.generating : generated ? ui.regenerating : ui.generate}
+                    {isGenerating
+                      ? ui.generating
+                      : productMode === "mindmap"
+                        ? generated
+                          ? modeText.mindmapRegenerate
+                          : modeText.mindmapGenerate
+                        : generated
+                          ? ui.regenerating
+                          : ui.generate}
                     {isGenerating ? <LoaderCircle className="spin-icon" size={18} /> : <Sparkles size={18} />}
                   </button>
                 </div>
@@ -1553,7 +1717,7 @@ function App() {
 
           <aside className="preview-pane" aria-label={ui.previewLabel}>
             <div className="preview-topline">
-              <span>Deck preview</span>
+              <span>{productMode === "mindmap" ? modeText.mindmapPreview : "Deck preview"}</span>
               <strong>{generated ? "Ready" : isGenerating ? "Generating" : "Draft"}</strong>
             </div>
             <div className="credit-panel">
@@ -1573,50 +1737,108 @@ function App() {
                 </>
               )}
             </div>
-            <div className={`deck-canvas ${isGenerating ? "loading" : ""}`}>
-              <div className="deck-cover">
-                <span>{ui.autoDesign}</span>
-                <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
-                <p>{ui.autoSlidesLanguage}</p>
-              </div>
-              <div className="chart-row">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
+            {productMode === "mindmap" ? (
+              <>
+                {mindMapSpec ? (
+                  <MindMapPresenter spec={mindMapSpec} />
+                ) : (
+                  <div className={`deck-canvas mindmap-empty ${isGenerating ? "loading" : ""}`}>
+                    <div className="deck-cover">
+                      <span>{modeText.mindmap}</span>
+                      <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
+                      <p>{modeText.mindmapIntro}</p>
+                    </div>
+                  </div>
+                )}
 
-            <div className="slide-list">
-              {slideTitles.map((title, index) => (
-                <div className="slide-row" key={title}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <p>{title}</p>
-                  {generated && <Check size={16} />}
-                </div>
-              ))}
-            </div>
-
-            <button className="download-button" type="button" disabled={!downloadUrl || isGenerating} onClick={() => downloadDeck()}>
-              <Download size={17} />
-              {downloadUrl ? ui.downloadAgain : ui.download}
-            </button>
-
-            {recentGenerations.length > 0 && (
-              <div className="history-list" aria-label={ui.recent}>
-                <div className="history-heading">
-                  <span>{ui.recent}</span>
-                  {generationId && <strong>{ui.saved}</strong>}
-                </div>
-                {recentGenerations.map((item) => (
-                  <a className="history-row" href={apiPath(`/api/generations/${item.id}/download`)} key={item.id}>
-                    <span>{item.title}</span>
-                    <small>
-                      {item.slideCount} {ui.pages} · {formatGenerationTime(item.createdAt, uiLanguage)}
-                    </small>
+                <div className="mindmap-export-actions">
+                  <a
+                    className="download-button"
+                    href={mindMapRecord ? apiPath(`/api/mindmaps/${mindMapRecord.id}/summary`) : undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={!mindMapRecord || isGenerating}
+                  >
+                    <Download size={17} />
+                    {modeText.exportSummary}
                   </a>
-                ))}
-              </div>
+                  <a
+                    className="download-button secondary-export"
+                    href={mindMapRecord ? apiPath(`/api/mindmaps/${mindMapRecord.id}/full`) : undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={!mindMapRecord || isGenerating}
+                  >
+                    <Download size={17} />
+                    {modeText.exportFull}
+                  </a>
+                </div>
+
+                {recentMindMaps.length > 0 && (
+                  <div className="history-list" aria-label={modeText.recentMindMaps}>
+                    <div className="history-heading">
+                      <span>{modeText.recentMindMaps}</span>
+                      {mindMapRecord && <strong>{ui.saved}</strong>}
+                    </div>
+                    {recentMindMaps.map((item) => (
+                      <button className="history-row" type="button" key={item.id} onClick={() => void loadMindMap(item.id)}>
+                        <span>{item.title}</span>
+                        <small>
+                          {item.nodeCount} {modeText.nodes} · {formatGenerationTime(item.createdAt, uiLanguage)}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className={`deck-canvas ${isGenerating ? "loading" : ""}`}>
+                  <div className="deck-cover">
+                    <span>{ui.autoDesign}</span>
+                    <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
+                    <p>{ui.autoSlidesLanguage}</p>
+                  </div>
+                  <div className="chart-row">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </div>
+
+                <div className="slide-list">
+                  {slideTitles.map((title, index) => (
+                    <div className="slide-row" key={title}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <p>{title}</p>
+                      {generated && <Check size={16} />}
+                    </div>
+                  ))}
+                </div>
+
+                <button className="download-button" type="button" disabled={!downloadUrl || isGenerating} onClick={() => downloadDeck()}>
+                  <Download size={17} />
+                  {downloadUrl ? ui.downloadAgain : ui.download}
+                </button>
+
+                {recentGenerations.length > 0 && (
+                  <div className="history-list" aria-label={ui.recent}>
+                    <div className="history-heading">
+                      <span>{ui.recent}</span>
+                      {generationId && <strong>{ui.saved}</strong>}
+                    </div>
+                    {recentGenerations.map((item) => (
+                      <a className="history-row" href={apiPath(`/api/generations/${item.id}/download`)} key={item.id}>
+                        <span>{item.title}</span>
+                        <small>
+                          {item.slideCount} {ui.pages} · {formatGenerationTime(item.createdAt, uiLanguage)}
+                        </small>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </aside>
         </div>

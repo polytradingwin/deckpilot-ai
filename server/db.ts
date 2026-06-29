@@ -61,6 +61,20 @@ db.exec(`
     reference_id TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS mindmap_generations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    delivery_mode TEXT NOT NULL,
+    style TEXT NOT NULL,
+    node_count INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    credit_cost INTEGER NOT NULL
+  );
 `);
 
 export function getDb() {

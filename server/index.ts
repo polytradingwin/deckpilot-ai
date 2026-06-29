@@ -3,10 +3,13 @@ import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { getCreditCost, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
+import { consumeCredits, getCreditCost, getUserById, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
 import { createCanvaAuthorizationUrl, getCanvaRuntimeStatus, handleCanvaOAuthCallback } from "./canva";
 import { createSignedPptxUpload } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
+import { createMindMapWithAI } from "./mindmapAi";
+import { renderMindMapFullHtml, renderMindMapSummaryHtml } from "./mindmapHtml";
+import { findMindMapGeneration, listMindMapGenerations, saveMindMapGeneration } from "./mindmapStore";
 import { extractTextFromPptx } from "./pptxReader";
 import { withUploadedPptxText } from "./queuedGeneration";
 import { createGenerationJob, findGeneration, findGenerationJob, listGenerations } from "./store";
@@ -16,6 +19,7 @@ import { getEmailDeliveryMode } from "./email";
 import { createCheckoutSession, fulfillCheckoutSession, getStripePublicConfig, getStripeStatus, handleStripeWebhook } from "./stripeBilling";
 import { toUserFacingError } from "./userErrors";
 import type { PresentationRequest } from "../src/shared/deck";
+import type { MindMapRequest } from "../src/shared/mindmap";
 
 const appRoot = process.cwd();
 dotenv.config({ path: path.resolve(appRoot, ".env"), override: true });
@@ -204,6 +208,61 @@ app.get("/api/generations", async (req, res) => {
   res.json({ records });
 });
 
+app.get("/api/mindmaps", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const records = await listMindMapGenerations(user.id);
+  res.json({ records });
+});
+
+app.get("/api/mindmaps/:id", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const id = String(req.params.id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(404).json({ error: "MindMap generation not found." });
+    return;
+  }
+
+  const generation = await findMindMapGeneration(user.id, id);
+  if (!generation) {
+    res.status(404).json({ error: "MindMap generation not found." });
+    return;
+  }
+
+  res.json(generation);
+});
+
+app.get("/api/mindmaps/:id/summary", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const generation = await findMindMapGeneration(user.id, String(req.params.id || ""));
+  if (!generation) {
+    res.status(404).send("MindMap generation not found.");
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(renderMindMapSummaryHtml(generation.spec));
+});
+
+app.get("/api/mindmaps/:id/full", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const generation = await findMindMapGeneration(user.id, String(req.params.id || ""));
+  if (!generation) {
+    res.status(404).send("MindMap generation not found.");
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(renderMindMapFullHtml(generation.spec));
+});
+
 app.get("/api/generations/:id/download", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -259,6 +318,34 @@ app.post("/api/uploads/pptx", async (req, res) => {
     res.json({ ...signed, originalName });
   } catch (error) {
     const message = error instanceof Error ? error.message : "创建上传地址失败。";
+    console.error(error);
+    res.status(400).json({ error: message });
+  }
+});
+
+app.post("/api/generate-mindmap", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const input = validateMindMapRequest(req.body);
+    const creditCost = getMindMapCreditCost(input);
+    if (user.creditsRemaining < creditCost) {
+      res.status(402).json({
+        error: `当前额度不足。本次需要 ${creditCost} credits，你还剩 ${user.creditsRemaining} credits。`,
+        user,
+      });
+      return;
+    }
+
+    const spec = await createMindMapWithAI(input);
+    const record = await saveMindMapGeneration(user.id, input, spec, creditCost);
+    await consumeCredits(user.id, creditCost);
+    const updatedUser = await getUserById(user.id);
+
+    res.json({ record, spec, user: updatedUser });
+  } catch (error) {
+    const message = toUserFacingError(error);
     console.error(error);
     res.status(400).json({ error: message });
   }
@@ -367,6 +454,26 @@ if (isDirectRun) {
 }
 
 export default app;
+
+function validateMindMapRequest(body: Partial<MindMapRequest>): MindMapRequest {
+  const prompt = String(body.prompt || "").trim();
+  if (prompt.length < 8) {
+    throw new Error("请提供至少 8 个字符的文稿内容。");
+  }
+
+  return {
+    prompt,
+    audience: String(body.audience || "高管 / 客户决策层").trim() || "高管 / 客户决策层",
+    deliveryMode: parseEnum(body.deliveryMode, ["presenting", "reading"], "deliveryMode"),
+    style: parseEnum(body.style || "business-premium", ["business-premium", "tech", "minimal-consulting"], "style"),
+  };
+}
+
+function getMindMapCreditCost(input: MindMapRequest) {
+  const baseCost = Number(process.env.MINDMAP_CREDIT_COST || 25);
+  const extraByLength = Math.ceil(Math.max(0, input.prompt.length - 3000) / 3000) * 5;
+  return Math.max(10, Math.round(baseCost + extraByLength));
+}
 
 async function validateRequest(
   body: Partial<PresentationRequest>,
