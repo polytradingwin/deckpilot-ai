@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { MindMapGenerationRecord, MindMapRequest, MindMapSpec } from "../src/shared/mindmap";
-import { readGeneratedFile, saveGeneratedFile } from "./fileStorage";
 import {
   supabaseFindMindMapGeneration,
   supabaseListMindMapGenerations,
   supabaseSaveMindMapGeneration,
   useSupabaseStore,
 } from "./supabaseStore";
+
+const mindMapStoreDir = path.resolve(process.cwd(), "output/generated");
 
 type MindMapGenerationRow = {
   id: string;
@@ -38,7 +41,7 @@ export async function saveMindMapGeneration(
   const storedFilename = `mindmaps/${userId}/${id}.json`;
   const createdAt = new Date().toISOString();
 
-  await saveGeneratedFile(storedFilename, file, "application/json; charset=utf-8");
+  await writeMindMapSpec(storedFilename, file);
 
   const record: MindMapGenerationRecord = {
     id,
@@ -136,7 +139,13 @@ export function countMindMapNodes(spec: MindMapSpec) {
 }
 
 async function readMindMapSpec(storedFilename: string) {
-  return JSON.parse((await readGeneratedFile(storedFilename)).toString("utf8")) as MindMapSpec;
+  return JSON.parse((await fs.readFile(path.join(mindMapStoreDir, storedFilename))).toString("utf8")) as MindMapSpec;
+}
+
+async function writeMindMapSpec(storedFilename: string, file: Buffer) {
+  const target = path.join(mindMapStoreDir, storedFilename);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, file);
 }
 
 function mapMindMapGeneration(row: MindMapGenerationRow): MindMapGenerationRecord {

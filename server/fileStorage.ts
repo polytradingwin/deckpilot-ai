@@ -68,12 +68,13 @@ export async function createSignedPptxUpload(storedFilename: string) {
 }
 
 async function uploadToSupabaseStorage(storedFilename: string, file: Buffer, contentType: string) {
+  const storageContentType = contentType.split(";")[0].trim() || "application/octet-stream";
   const response = await fetch(`${getSupabaseUrl()}/storage/v1/object/${bucketName}/${storedFilename}`, {
     method: "POST",
     headers: {
       apikey: getSupabaseAnonKey(),
       Authorization: `Bearer ${getSupabaseAnonKey()}`,
-      "Content-Type": contentType,
+      "Content-Type": storageContentType,
       "x-upsert": "false",
     },
     body: new Uint8Array(file),
