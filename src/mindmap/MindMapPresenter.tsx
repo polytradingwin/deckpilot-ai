@@ -18,11 +18,13 @@ type MapItem = {
 };
 
 const stage = {
-  width: 1760,
-  baseHeight: 760,
-  rootX: 280,
-  mainX: 760,
-  childX: 1240,
+  width: 2300,
+  baseHeight: 900,
+  rootX: 360,
+  mainX: 940,
+  childX: 1540,
+  topPadding: 190,
+  bottomPadding: 220,
 };
 
 export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterProps) {
@@ -107,10 +109,12 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   return (
     <div className={`mindmap-presenter ${immersive ? "immersive" : ""}`} aria-label="MindMap preview">
       <div className="mindmap-stage" style={{ height: viewportHeight }} onWheel={handleWheel}>
-        <div className="mindmap-deck-heading">
-          <span>{spec.subtitle || spec.audience}</span>
-          <h3>{spec.summary.headline || spec.title}</h3>
-        </div>
+        {!immersive && (
+          <div className="mindmap-deck-heading">
+            <span>{spec.subtitle || spec.audience}</span>
+            <h3>{spec.summary.headline || spec.title}</h3>
+          </div>
+        )}
         <div className="mindmap-zoom">
           <button type="button" onClick={() => setZoom((value) => clamp(Number((value - 0.08).toFixed(2)), 0.46, 1.18))}>
             -
@@ -191,28 +195,36 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
 }
 
 function buildMapModel(spec: MindMapSpec) {
-  const items: MapItem[] = [
-    {
-      id: "root",
-      title: compactNodeText(spec.summary.headline || spec.title, 42),
-      subtitle: compactMetricLine(spec),
-      detail: compactNodeText(spec.summary.conclusion || spec.subtitle, 76),
-      depth: 0,
-      x: stage.rootX,
-      y: stage.baseHeight / 2,
-    },
-  ];
   const links: Array<{ from: string; to: string }> = [];
   const mainNodes = spec.nodes.length ? spec.nodes : createFallbackNodes(spec);
-  const rowGap = Math.max(178, Math.min(250, 980 / Math.max(1, mainNodes.length)));
-  const centerY = stage.baseHeight / 2;
-  const startY = centerY - ((mainNodes.length - 1) * rowGap) / 2;
+  const lanes = mainNodes.map((node) => {
+    const children = node.children.slice(0, 5);
+    return {
+      node,
+      children,
+      height: Math.max(270, Math.max(1, children.length) * 132 + 112),
+    };
+  });
+  const laneGap = 96;
+  const lanesHeight = lanes.reduce((sum, lane) => sum + lane.height, 0) + Math.max(0, lanes.length - 1) * laneGap;
+  const worldHeight = Math.max(stage.baseHeight, lanesHeight + stage.topPadding + stage.bottomPadding);
+  const root: MapItem = {
+    id: "root",
+    title: buildCoverTitle(spec),
+    subtitle: compactMetricLine(spec),
+    detail: buildCoverDetail(spec),
+    depth: 0,
+    x: stage.rootX,
+    y: worldHeight / 2,
+  };
+  const items: MapItem[] = [root];
   const mainItems: MapItem[] = [];
   const childItems: MapItem[] = [];
+  let laneTop = (worldHeight - lanesHeight) / 2;
 
-  mainNodes.forEach((node, nodeIndex) => {
+  lanes.forEach(({ node, children, height }, nodeIndex) => {
     const mainId = `node-${nodeIndex}`;
-    const mainY = startY + nodeIndex * rowGap;
+    const mainY = laneTop + height / 2;
     mainItems.push({
       id: mainId,
       parentId: "root",
@@ -220,14 +232,14 @@ function buildMapModel(spec: MindMapSpec) {
       subtitle: compactNodeText(node.subtitle, 18),
       detail: compactNodeText(node.insight, 56),
       depth: 1,
-      x: stage.mainX + (nodeIndex % 2) * 80,
+      x: stage.mainX,
       y: mainY,
     });
     links.push({ from: "root", to: mainId });
 
-    const childGap = node.children.length > 2 ? 112 : 132;
-    const childStartY = mainY - ((node.children.length - 1) * childGap) / 2;
-    node.children.slice(0, 5).forEach((child, childIndex) => {
+    const childGap = 132;
+    const childStartY = mainY - ((children.length - 1) * childGap) / 2;
+    children.forEach((child, childIndex) => {
       const childId = `${mainId}-child-${childIndex}`;
       childItems.push({
         id: childId,
@@ -236,18 +248,20 @@ function buildMapModel(spec: MindMapSpec) {
         subtitle: compactNodeText(child.subtitle, 14),
         detail: compactNodeText(child.detail, 40),
         depth: 2,
-        x: stage.childX + (childIndex % 2) * 120,
+        x: stage.childX + (childIndex % 2) * 110,
         y: childStartY + childIndex * childGap,
       });
       links.push({ from: mainId, to: childId });
     });
+
+    laneTop += height + laneGap;
   });
 
   items.push(...mainItems, ...childItems);
 
   const minY = Math.min(...items.map((item) => item.y - nodeSize(item).height / 2));
   const maxY = Math.max(...items.map((item) => item.y + nodeSize(item).height / 2));
-  const shiftY = Math.max(90, 120 - minY);
+  const shiftY = Math.max(0, 120 - minY);
   if (shiftY > 0) {
     items.forEach((item) => {
       item.y += shiftY;
@@ -258,7 +272,7 @@ function buildMapModel(spec: MindMapSpec) {
     items,
     links,
     byId: new Map(items.map((item) => [item.id, item])),
-    height: Math.max(stage.baseHeight, maxY - minY + 240),
+    height: Math.max(worldHeight, maxY - minY + 240),
   };
 }
 
@@ -279,9 +293,9 @@ function createFallbackNodes(spec: MindMapSpec): MindMapNode[] {
 }
 
 function nodeSize(item: MapItem) {
-  if (item.depth === 0) return { width: 460, height: item.detail ? 178 : 146 };
-  if (item.depth === 1) return { width: 350, height: item.detail ? 148 : 116 };
-  return { width: 270, height: item.detail ? 100 : 76 };
+  if (item.depth === 0) return { width: 540, height: item.detail ? 176 : 142 };
+  if (item.depth === 1) return { width: 380, height: item.detail ? 152 : 118 };
+  return { width: 300, height: item.detail ? 104 : 78 };
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -289,18 +303,61 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function compactMetricLine(spec: MindMapSpec) {
+  const sourceText = collectSpecText(spec);
+  const roi = extractRoi(sourceText);
   const metrics = spec.summary.keyMetrics
-    .slice(0, 3)
+    .slice(0, 4)
     .map((metric) => [metric.label, metric.value].filter(Boolean).join(" "))
     .filter(Boolean);
-  return compactNodeText(metrics.join(" | ") || spec.subtitle || "核心总结", 46);
+  if (roi && !metrics.some((metric) => /ROI/i.test(metric))) metrics.push(roi);
+  return compactNodeText(metrics.join(" | ") || spec.subtitle || "核心总结", 64, roi ? [roi] : []);
 }
 
-function compactNodeText(value: unknown, maxLength: number) {
+function buildCoverTitle(spec: MindMapSpec) {
+  const sourceText = collectSpecText(spec);
+  const roi = extractRoi(sourceText);
+  const headline = spec.summary.headline || spec.title;
+  const compactHeadline = compactNodeText(headline, 30, roi ? [roi] : []);
+  return compactHeadline.replace(/[，,。；;]\s*$/g, "");
+}
+
+function buildCoverDetail(spec: MindMapSpec) {
+  const conclusion = compactNodeText(spec.summary.conclusion || spec.subtitle, 48);
+  return conclusion === spec.summary.headline ? "" : conclusion;
+}
+
+function collectSpecText(spec: MindMapSpec) {
+  return [
+    spec.title,
+    spec.subtitle,
+    spec.summary.headline,
+    spec.summary.conclusion,
+    ...spec.summary.keyMetrics.flatMap((metric) => [metric.label, metric.value, metric.note]),
+    ...spec.nodes.flatMap((node) => [
+      node.title,
+      node.subtitle,
+      node.insight,
+      ...node.children.flatMap((child) => [child.title, child.subtitle, child.detail]),
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function extractRoi(value: string) {
+  return value.match(/ROI\s*[≈~约=：:]*\s*\d+(?:\.\d+)?\s*(?:倍|x|X)?/i)?.[0].replace(/\s+/g, "") || "";
+}
+
+function compactNodeText(value: unknown, maxLength: number, protectedTerms: string[] = []) {
   const normalized = String(value || "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
   if (normalized.length <= maxLength) return normalized;
+  const protectedTerm = protectedTerms.find((term) => term && normalized.includes(term));
+  if (protectedTerm && !normalized.slice(0, maxLength).includes(protectedTerm)) {
+    const headLength = Math.max(0, maxLength - protectedTerm.length - 2);
+    return `${normalized.slice(0, headLength).trim()}…${protectedTerm}`;
+  }
   return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
 }

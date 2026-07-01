@@ -1058,12 +1058,13 @@ main {
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 18px 42px rgba(49, 61, 64, 0.11);
   text-align: center;
+  overflow-wrap: anywhere;
   animation: mindmap-node-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: transform 240ms ease, border-color 240ms ease, box-shadow 240ms ease, background 240ms ease;
 }
 
 .map-node.depth-0 {
-  padding: 20px 28px;
+  padding: 18px 30px;
   border-color: rgba(201, 146, 66, 0.72);
   background: #113740;
   color: #f8faf7;
@@ -1082,7 +1083,7 @@ main {
 
 .map-node span {
   color: #6c765f;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -1093,7 +1094,8 @@ main {
 }
 
 .map-node.depth-0 strong {
-  font-size: 1.42rem;
+  font-size: 1.3rem;
+  line-height: 1.16;
 }
 
 .map-node.depth-2 strong {
@@ -1102,8 +1104,13 @@ main {
 
 .map-node small {
   color: #52606a;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   line-height: 1.35;
+}
+
+.map-node.depth-0 small {
+  max-width: 92%;
+  justify-self: center;
 }
 
 .map-node.active {
