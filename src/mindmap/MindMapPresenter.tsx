@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import type { MindMapNode, MindMapSpec } from "../shared/mindmap";
 
 type MindMapPresenterProps = {
@@ -9,9 +9,13 @@ type MindMapPresenterProps = {
 type MapItem = {
   id: string;
   parentId?: string;
+  badge?: string;
   title: string;
   subtitle?: string;
   detail?: string;
+  accent: string;
+  surface: string;
+  soft: string;
   depth: 0 | 1 | 2;
   x: number;
   y: number;
@@ -34,6 +38,21 @@ const stage = {
   topPadding: 260,
   bottomPadding: 300,
 };
+
+const rootTone = {
+  accent: "#e1b451",
+  surface: "#0e3b44",
+  soft: "rgba(225, 180, 81, 0.18)",
+};
+
+const nodeTones = [
+  { accent: "#e0a431", surface: "#f9f7ef", soft: "rgba(224, 164, 49, 0.16)" },
+  { accent: "#8fb7aa", surface: "#f5faf5", soft: "rgba(143, 183, 170, 0.18)" },
+  { accent: "#d18b6a", surface: "#fbf5ef", soft: "rgba(209, 139, 106, 0.16)" },
+  { accent: "#7fa0b8", surface: "#f3f7fb", soft: "rgba(127, 160, 184, 0.18)" },
+  { accent: "#b5a065", surface: "#faf7ef", soft: "rgba(181, 160, 101, 0.18)" },
+  { accent: "#a3aa80", surface: "#f7f8ef", soft: "rgba(163, 170, 128, 0.18)" },
+];
 
 export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterProps) {
   const model = useMemo(() => buildMapModel(spec), [spec]);
@@ -216,12 +235,18 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
                   top: item.y - size.height / 2,
                   width: size.width,
                   minHeight: size.height,
-                }}
+                  "--node-accent": item.accent,
+                  "--node-surface": item.surface,
+                  "--node-soft": item.soft,
+                } as CSSProperties}
                 onClick={() => setActiveIndex(index)}
               >
-                {item.subtitle && <span>{item.subtitle}</span>}
-                <strong>{item.title}</strong>
-                {item.detail && <small>{item.detail}</small>}
+                {item.badge && <em className="node-badge">{item.badge}</em>}
+                <span className="node-copy">
+                  {item.subtitle && <span>{item.subtitle}</span>}
+                  <strong>{item.title}</strong>
+                  {item.detail && <small>{item.detail}</small>}
+                </span>
               </button>
             );
           })}
@@ -266,6 +291,9 @@ function buildMapModel(spec: MindMapSpec) {
     title: buildCoverTitle(spec),
     subtitle: compactMetricLine(spec),
     detail: buildCoverDetail(spec),
+    accent: rootTone.accent,
+    surface: rootTone.surface,
+    soft: rootTone.soft,
     depth: 0,
     x: stage.rootX,
     y: worldHeight / 2,
@@ -278,12 +306,17 @@ function buildMapModel(spec: MindMapSpec) {
   lanes.forEach(({ node, children, height }, nodeIndex) => {
     const mainId = `node-${nodeIndex}`;
     const mainY = laneTop + height / 2;
+    const tone = nodeTones[nodeIndex % nodeTones.length];
     mainItems.push({
       id: mainId,
       parentId: "root",
+      badge: String(nodeIndex + 1).padStart(2, "0"),
       title: compactNodeText(node.title, 28),
       subtitle: compactNodeText(node.subtitle, 18),
       detail: compactNodeText(node.insight, 56),
+      accent: tone.accent,
+      surface: tone.surface,
+      soft: tone.soft,
       depth: 1,
       x: stage.mainX,
       y: mainY,
@@ -297,9 +330,13 @@ function buildMapModel(spec: MindMapSpec) {
       childItems.push({
         id: childId,
         parentId: mainId,
+        badge: String.fromCharCode(65 + childIndex),
         title: compactNodeText(child.title, 22),
         subtitle: compactNodeText(child.subtitle, 14),
         detail: compactNodeText(child.detail, 40),
+        accent: tone.accent,
+        surface: childIndex % 2 === 0 ? tone.surface : "#ffffff",
+        soft: tone.soft,
         depth: 2,
         x: stage.childX + (childIndex % 2) * 190,
         y: childStartY + childIndex * childGap,

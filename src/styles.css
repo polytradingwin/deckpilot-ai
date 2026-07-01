@@ -964,9 +964,10 @@ main {
   border-radius: 8px;
   color: #162033;
   background:
-    radial-gradient(circle at 18% 26%, rgba(157, 191, 199, 0.32), transparent 24%),
-    radial-gradient(circle at 82% 72%, rgba(224, 176, 92, 0.26), transparent 28%),
-    linear-gradient(180deg, #fbfaf5 0%, #f0ede4 100%);
+    radial-gradient(circle at 18% 22%, rgba(129, 166, 160, 0.3), transparent 24%),
+    radial-gradient(circle at 82% 68%, rgba(221, 175, 91, 0.26), transparent 30%),
+    radial-gradient(circle at 48% 48%, rgba(255, 255, 255, 0.84), transparent 42%),
+    linear-gradient(135deg, #f8f7f0 0%, #ebe9df 48%, #f7f2e8 100%);
   box-shadow: inset 0 0 0 1px rgba(27, 43, 52, 0.09);
 }
 
@@ -990,8 +991,8 @@ main {
 
 .mindmap-links path {
   fill: none;
-  stroke: rgba(87, 103, 106, 0.36);
-  stroke-width: 4;
+  stroke: rgba(72, 86, 86, 0.34);
+  stroke-width: 5;
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
@@ -1000,8 +1001,8 @@ main {
 }
 
 .mindmap-links path.active {
-  stroke: rgba(207, 156, 73, 0.82);
-  stroke-width: 6;
+  stroke: rgba(207, 156, 73, 0.9);
+  stroke-width: 8;
 }
 
 .mindmap-deck-heading {
@@ -1053,85 +1054,147 @@ main {
 
 .map-node {
   position: absolute;
-  display: grid;
-  align-content: center;
-  gap: 10px;
-  border: 2px solid rgba(161, 176, 178, 0.5);
-  border-radius: 16px;
-  color: #172033;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 18px 42px rgba(49, 61, 64, 0.11);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 26px;
+  color: #102d35;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.8)),
+    var(--node-surface);
+  box-shadow:
+    0 26px 70px rgba(54, 67, 66, 0.16),
+    inset 0 0 0 1px rgba(21, 45, 51, 0.06);
+  text-align: left;
   overflow-wrap: anywhere;
+  backdrop-filter: blur(18px);
   animation: mindmap-node-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: transform 240ms ease, border-color 240ms ease, box-shadow 240ms ease, background 240ms ease;
 }
 
 .map-node.depth-0 {
-  padding: 34px 50px;
-  border-color: rgba(201, 146, 66, 0.72);
-  background: #113740;
+  justify-content: center;
+  padding: 38px 56px;
+  border-color: rgba(236, 211, 145, 0.56);
+  background:
+    radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.14), transparent 34%),
+    linear-gradient(145deg, #0e3b44, #12333b 58%, #0b2930);
   color: #f8faf7;
   box-shadow:
-    0 24px 70px rgba(27, 43, 52, 0.2),
-    0 0 0 8px rgba(201, 146, 66, 0.18);
+    0 30px 90px rgba(18, 43, 48, 0.28),
+    0 0 0 10px rgba(201, 146, 66, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
 .map-node.depth-1 {
-  padding: 26px 34px;
+  padding: 30px 38px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(250, 248, 242, 0.88)),
+    var(--node-surface);
 }
 
 .map-node.depth-2 {
-  padding: 20px 26px;
+  padding: 22px 30px;
+  border-color: rgba(255, 255, 255, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(250, 249, 244, 0.74)),
+    var(--node-soft);
 }
 
-.map-node span {
-  color: #6c765f;
+.node-badge {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  color: #102d35;
+  background: linear-gradient(180deg, #f6cb6d, var(--node-accent));
+  box-shadow:
+    0 14px 34px rgba(36, 55, 54, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+  font-style: normal;
+  font-size: 1.44rem;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.map-node.depth-2 .node-badge {
+  width: 52px;
+  height: 52px;
+  font-size: 1.18rem;
+}
+
+.node-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.node-copy > span {
+  color: color-mix(in srgb, var(--node-accent) 58%, #2e4e55);
   font-size: 1.12rem;
-  font-weight: 900;
+  font-weight: 950;
   line-height: 1.2;
 }
 
-.map-node strong {
+.node-copy > strong {
   font-size: 1.62rem;
-  line-height: 1.18;
+  line-height: 1.12;
+  letter-spacing: 0;
 }
 
-.map-node.depth-0 strong {
+.map-node.depth-0 .node-copy {
+  justify-items: center;
+  text-align: center;
+}
+
+.map-node.depth-0 .node-copy > strong {
   font-size: 2.08rem;
   line-height: 1.16;
 }
 
-.map-node.depth-2 strong {
+.map-node.depth-2 .node-copy > strong {
   font-size: 1.42rem;
 }
 
-.map-node small {
+.node-copy > small {
   color: #52606a;
   font-size: 1.08rem;
   line-height: 1.35;
 }
 
-.map-node.depth-0 small {
+.map-node.depth-0 .node-copy > span {
+  color: #f1c964;
+}
+
+.map-node.depth-0 .node-copy > small {
   max-width: 92%;
   justify-self: center;
+  color: rgba(241, 246, 242, 0.78);
 }
 
 .map-node.active {
   z-index: 3;
-  border-color: #c99242;
-  background: #123742;
+  border-color: rgba(236, 196, 109, 0.95);
+  background:
+    radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.14), transparent 34%),
+    linear-gradient(145deg, #113d45, #12333b 58%, #0b2930);
   color: #f8faf7;
   box-shadow:
-    0 24px 70px rgba(27, 43, 52, 0.22),
-    0 0 0 8px rgba(201, 146, 66, 0.2);
-  transform: scale(1.08);
+    0 32px 90px rgba(18, 43, 48, 0.3),
+    0 0 0 10px color-mix(in srgb, var(--node-accent) 30%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transform: scale(1.06);
 }
 
-.map-node.depth-0 span,
-.map-node.depth-0 small,
-.map-node.active span,
-.map-node.active small {
+.map-node.active .node-badge {
+  background: linear-gradient(180deg, #f8d47c, var(--node-accent));
+}
+
+.map-node.active .node-copy > span,
+.map-node.active .node-copy > small {
   color: #d8e0d4;
 }
 
