@@ -38,11 +38,9 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const wheelResetTimer = useRef<number | null>(null);
   const visibleItems = model.items.slice(0, activeIndex + 1);
   const active = visibleItems[visibleItems.length - 1] || model.items[0];
-  const displayItems = immersive
-    ? [{ item: active, index: activeIndex }].filter((entry) => entry.item)
-    : visibleItems.map((item, index) => ({ item, index }));
+  const displayItems = visibleItems.map((item, index) => ({ item, index }));
   const visibleIds = new Set(displayItems.map((entry) => entry.item.id));
-  const visibleLinks = immersive ? [] : model.links.filter((link) => visibleIds.has(link.from) && visibleIds.has(link.to));
+  const visibleLinks = model.links.filter((link) => visibleIds.has(link.from) && visibleIds.has(link.to));
   const viewportHeight = viewport.height;
   const viewportWidth = viewport.width;
   const translateX = viewportWidth / 2 - active.x * zoom;
@@ -196,8 +194,9 @@ function buildMapModel(spec: MindMapSpec) {
   const items: MapItem[] = [
     {
       id: "root",
-      title: spec.title,
-      subtitle: spec.summary.conclusion,
+      title: compactNodeText(spec.summary.headline || spec.title, 42),
+      subtitle: compactMetricLine(spec),
+      detail: compactNodeText(spec.summary.conclusion || spec.subtitle, 76),
       depth: 0,
       x: stage.rootX,
       y: stage.baseHeight / 2,
@@ -208,16 +207,18 @@ function buildMapModel(spec: MindMapSpec) {
   const rowGap = Math.max(178, Math.min(250, 980 / Math.max(1, mainNodes.length)));
   const centerY = stage.baseHeight / 2;
   const startY = centerY - ((mainNodes.length - 1) * rowGap) / 2;
+  const mainItems: MapItem[] = [];
+  const childItems: MapItem[] = [];
 
   mainNodes.forEach((node, nodeIndex) => {
     const mainId = `node-${nodeIndex}`;
     const mainY = startY + nodeIndex * rowGap;
-    items.push({
+    mainItems.push({
       id: mainId,
       parentId: "root",
-      title: node.title,
-      subtitle: node.subtitle,
-      detail: node.insight,
+      title: compactNodeText(node.title, 28),
+      subtitle: compactNodeText(node.subtitle, 18),
+      detail: compactNodeText(node.insight, 56),
       depth: 1,
       x: stage.mainX + (nodeIndex % 2) * 80,
       y: mainY,
@@ -228,12 +229,12 @@ function buildMapModel(spec: MindMapSpec) {
     const childStartY = mainY - ((node.children.length - 1) * childGap) / 2;
     node.children.slice(0, 5).forEach((child, childIndex) => {
       const childId = `${mainId}-child-${childIndex}`;
-      items.push({
+      childItems.push({
         id: childId,
         parentId: mainId,
-        title: child.title,
-        subtitle: child.subtitle,
-        detail: child.detail,
+        title: compactNodeText(child.title, 22),
+        subtitle: compactNodeText(child.subtitle, 14),
+        detail: compactNodeText(child.detail, 40),
         depth: 2,
         x: stage.childX + (childIndex % 2) * 120,
         y: childStartY + childIndex * childGap,
@@ -241,6 +242,8 @@ function buildMapModel(spec: MindMapSpec) {
       links.push({ from: mainId, to: childId });
     });
   });
+
+  items.push(...mainItems, ...childItems);
 
   const minY = Math.min(...items.map((item) => item.y - nodeSize(item).height / 2));
   const maxY = Math.max(...items.map((item) => item.y + nodeSize(item).height / 2));
@@ -276,11 +279,28 @@ function createFallbackNodes(spec: MindMapSpec): MindMapNode[] {
 }
 
 function nodeSize(item: MapItem) {
-  if (item.depth === 0) return { width: 390, height: 154 };
-  if (item.depth === 1) return { width: 390, height: item.detail ? 172 : 136 };
-  return { width: 320, height: item.detail ? 112 : 84 };
+  if (item.depth === 0) return { width: 460, height: item.detail ? 178 : 146 };
+  if (item.depth === 1) return { width: 350, height: item.detail ? 148 : 116 };
+  return { width: 270, height: item.detail ? 100 : 76 };
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function compactMetricLine(spec: MindMapSpec) {
+  const metrics = spec.summary.keyMetrics
+    .slice(0, 3)
+    .map((metric) => [metric.label, metric.value].filter(Boolean).join(" "))
+    .filter(Boolean);
+  return compactNodeText(metrics.join(" | ") || spec.subtitle || "核心总结", 46);
+}
+
+function compactNodeText(value: unknown, maxLength: number) {
+  const normalized = String(value || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
 }
