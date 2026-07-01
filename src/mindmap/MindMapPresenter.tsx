@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
 import type { MindMapNode, MindMapSpec } from "../shared/mindmap";
 
 type MindMapPresenterProps = {
@@ -17,20 +17,30 @@ type MapItem = {
   y: number;
 };
 
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  baseX: number;
+  baseY: number;
+};
+
 const stage = {
-  width: 2300,
-  baseHeight: 900,
-  rootX: 360,
-  mainX: 940,
-  childX: 1540,
-  topPadding: 190,
-  bottomPadding: 220,
+  width: 3200,
+  baseHeight: 1100,
+  rootX: 480,
+  mainX: 1320,
+  childX: 2200,
+  topPadding: 260,
+  bottomPadding: 300,
 };
 
 export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterProps) {
   const model = useMemo(() => buildMapModel(spec), [spec]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [zoom, setZoom] = useState(immersive ? 0.86 : 0.62);
+  const [zoom, setZoom] = useState(immersive ? 0.98 : 0.44);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
   const [viewport, setViewport] = useState({
     width: immersive ? window.innerWidth : 720,
     height: immersive ? Math.max(520, window.innerHeight - 88) : 520,
@@ -38,6 +48,7 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const wheelBuffer = useRef(0);
   const wheelLockUntil = useRef(0);
   const wheelResetTimer = useRef<number | null>(null);
+  const drag = useRef<DragState | null>(null);
   const visibleItems = model.items.slice(0, activeIndex + 1);
   const active = visibleItems[visibleItems.length - 1] || model.items[0];
   const displayItems = visibleItems.map((item, index) => ({ item, index }));
@@ -45,8 +56,8 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const visibleLinks = model.links.filter((link) => visibleIds.has(link.from) && visibleIds.has(link.to));
   const viewportHeight = viewport.height;
   const viewportWidth = viewport.width;
-  const translateX = viewportWidth / 2 - active.x * zoom;
-  const translateY = viewportHeight / 2 - active.y * zoom;
+  const translateX = viewportWidth / 2 - active.x * zoom + pan.x;
+  const translateY = viewportHeight / 2 - active.y * zoom + pan.y;
 
   const go = (direction: -1 | 1) => {
     setActiveIndex((current) => clamp(current + direction, 0, model.items.length - 1));
@@ -67,6 +78,10 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   useEffect(() => {
     setActiveIndex((current) => clamp(current, 0, model.items.length - 1));
   }, [model.items.length]);
+
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+  }, [activeIndex, model]);
 
   useEffect(() => {
     if (!immersive) return;
@@ -106,9 +121,47 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
     wheelLockUntil.current = now + 260;
   };
 
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!immersive || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button,input")) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: pan.x,
+      baseY: pan.y,
+    };
+    setIsPanning(true);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setPan({
+      x: drag.current.baseX + event.clientX - drag.current.startX,
+      y: drag.current.baseY + event.clientY - drag.current.startY,
+    });
+  };
+
+  const handlePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    drag.current = null;
+    setIsPanning(false);
+  };
+
   return (
-    <div className={`mindmap-presenter ${immersive ? "immersive" : ""}`} aria-label="MindMap preview">
-      <div className="mindmap-stage" style={{ height: viewportHeight }} onWheel={handleWheel}>
+    <div className={`mindmap-presenter ${immersive ? "immersive" : ""} ${isPanning ? "panning" : ""}`} aria-label="MindMap preview">
+      <div
+        className="mindmap-stage"
+        style={{ height: viewportHeight }}
+        onPointerCancel={handlePointerEnd}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onWheel={handleWheel}
+      >
         {!immersive && (
           <div className="mindmap-deck-heading">
             <span>{spec.subtitle || spec.audience}</span>
@@ -116,10 +169,10 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
           </div>
         )}
         <div className="mindmap-zoom">
-          <button type="button" onClick={() => setZoom((value) => clamp(Number((value - 0.08).toFixed(2)), 0.46, 1.18))}>
+          <button type="button" onClick={() => setZoom((value) => clamp(Number((value - 0.08).toFixed(2)), 0.38, 1.28))}>
             -
           </button>
-          <button type="button" onClick={() => setZoom((value) => clamp(Number((value + 0.08).toFixed(2)), 0.46, 1.18))}>
+          <button type="button" onClick={() => setZoom((value) => clamp(Number((value + 0.08).toFixed(2)), 0.38, 1.28))}>
             +
           </button>
         </div>
@@ -202,10 +255,10 @@ function buildMapModel(spec: MindMapSpec) {
     return {
       node,
       children,
-      height: Math.max(270, Math.max(1, children.length) * 132 + 112),
+      height: Math.max(430, Math.max(1, children.length) * 220 + 180),
     };
   });
-  const laneGap = 96;
+  const laneGap = 170;
   const lanesHeight = lanes.reduce((sum, lane) => sum + lane.height, 0) + Math.max(0, lanes.length - 1) * laneGap;
   const worldHeight = Math.max(stage.baseHeight, lanesHeight + stage.topPadding + stage.bottomPadding);
   const root: MapItem = {
@@ -237,7 +290,7 @@ function buildMapModel(spec: MindMapSpec) {
     });
     links.push({ from: "root", to: mainId });
 
-    const childGap = 132;
+    const childGap = 220;
     const childStartY = mainY - ((children.length - 1) * childGap) / 2;
     children.forEach((child, childIndex) => {
       const childId = `${mainId}-child-${childIndex}`;
@@ -248,7 +301,7 @@ function buildMapModel(spec: MindMapSpec) {
         subtitle: compactNodeText(child.subtitle, 14),
         detail: compactNodeText(child.detail, 40),
         depth: 2,
-        x: stage.childX + (childIndex % 2) * 110,
+        x: stage.childX + (childIndex % 2) * 190,
         y: childStartY + childIndex * childGap,
       });
       links.push({ from: mainId, to: childId });
@@ -293,9 +346,9 @@ function createFallbackNodes(spec: MindMapSpec): MindMapNode[] {
 }
 
 function nodeSize(item: MapItem) {
-  if (item.depth === 0) return { width: 540, height: item.detail ? 176 : 142 };
-  if (item.depth === 1) return { width: 380, height: item.detail ? 152 : 118 };
-  return { width: 300, height: item.detail ? 104 : 78 };
+  if (item.depth === 0) return { width: 900, height: item.detail ? 300 : 240 };
+  if (item.depth === 1) return { width: 660, height: item.detail ? 270 : 210 };
+  return { width: 520, height: item.detail ? 200 : 150 };
 }
 
 function clamp(value: number, min: number, max: number) {
