@@ -174,7 +174,8 @@ function htmlDocument(spec: MindMapSpec, mode: "summary" | "full", body: string)
     .metrics small { display: block; color: var(--muted); margin-top: 4px; }
     .mindmap-board {
       position: relative;
-      min-height: 95mm;
+      min-height: 0;
+      padding: 10mm 0 12mm;
       border-top: 1px solid var(--line);
       border-bottom: 1px solid var(--line);
       background:
@@ -183,12 +184,9 @@ function htmlDocument(spec: MindMapSpec, mode: "summary" | "full", body: string)
       background-size: 38mm 24mm;
     }
     .center-node {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 72mm;
-      min-height: 42mm;
-      transform: translate(-50%, -50%);
+      width: 86mm;
+      min-height: 0;
+      margin: 0 auto 10mm;
       padding: 12px;
       border-radius: 8px;
       color: #fff;
@@ -201,7 +199,7 @@ function htmlDocument(spec: MindMapSpec, mode: "summary" | "full", body: string)
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
-      padding: 12mm 0;
+      padding: 0;
     }
     .map-node {
       min-height: 36mm;

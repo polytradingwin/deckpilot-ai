@@ -120,26 +120,26 @@ const palettes = {
   smartisanKeynote: {
     bg: "0B0B0B",
     panel: "111111",
-    panel2: "F4EFE5",
+    panel2: "191817",
     text: "F7F3EA",
-    muted: "A9A39A",
+    muted: "D8D1C6",
     gold: "D8B36A",
     cyan: "E34B3F",
     sage: "B8B0A0",
-    line: "2B2B2B",
+    line: "34312D",
   },
 } satisfies Record<DeckTemplate, Record<"bg" | "panel" | "panel2" | "text" | "muted" | "gold" | "cyan" | "sage" | "line", string>>;
 
 type Palette = (typeof palettes)[DeckTemplate];
 
 let colors = palettes.executiveDark;
-let fontSet: { head: string; body: string } = { head: "Microsoft YaHei", body: "Microsoft YaHei" };
+let fontSet: { head: string; body: string } = { head: "Microsoft YaHei UI", body: "Microsoft YaHei UI" };
 
 const templateByStyle = {
-  consulting: "executiveDark",
-  product: "productNeon",
-  brand: "editorialLight",
-  academic: "academicPaper",
+  consulting: "smartisanKeynote",
+  product: "smartisanKeynote",
+  brand: "smartisanKeynote",
+  academic: "smartisanKeynote",
 } as const satisfies Record<string, DeckTemplate>;
 
 type Accent = "gold" | "cyan" | "sage";
@@ -148,10 +148,10 @@ export type RenderAssets = {
 };
 
 const fontSystems = {
-  modernSans: { head: "Microsoft YaHei", body: "Microsoft YaHei" },
-  editorialSerif: { head: "Georgia", body: "Microsoft YaHei" },
-  condensedImpact: { head: "Arial Black", body: "Microsoft YaHei" },
-  roundedHuman: { head: "Trebuchet MS", body: "Microsoft YaHei" },
+  modernSans: { head: "Microsoft YaHei UI", body: "Microsoft YaHei UI" },
+  editorialSerif: { head: "Microsoft YaHei UI", body: "Microsoft YaHei UI" },
+  condensedImpact: { head: "Microsoft YaHei UI", body: "Microsoft YaHei UI" },
+  roundedHuman: { head: "Microsoft YaHei UI", body: "Microsoft YaHei UI" },
 } as const;
 
 export async function renderDeckToPptx(deck: DeckSpec, assets: RenderAssets = {}): Promise<Buffer> {
@@ -292,14 +292,7 @@ function hexToRgb(hex: string) {
 }
 
 function resolveTemplate(deck: DeckSpec): DeckTemplate {
-  const requested = deck.theme?.template;
-  if (requested && requested in palettes) return requested;
-  const fromMood = templateByStyle[(deck.theme?.mood || "") as keyof typeof templateByStyle];
-  if (fromMood) return fromMood;
-  const templates = Object.keys(palettes) as DeckTemplate[];
-  const seed = `${deck.title || ""}${deck.subtitle || ""}${Date.now()}`;
-  const index = Array.from(seed).reduce((sum, char) => sum + char.charCodeAt(0), 0) % templates.length;
-  return templates[index] || "executiveDark";
+  return "smartisanKeynote";
 }
 
 function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, template: DeckTemplate) {
@@ -314,7 +307,7 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, t
   });
 
   if (template === "smartisanKeynote") {
-    const lightPage = index % 5 === 2;
+    const lightPage = false;
     if (lightPage) {
       page.background = { color: "F4EFE5" };
       page.addShape("rect", {
@@ -371,14 +364,6 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, t
       h: 6.64,
       fill: { color: colors[accent], transparency: template === "internalOps" ? 10 : 0 },
       line: { color: colors[accent], transparency: 100 },
-    });
-    page.addShape("rect", {
-      x: 9.55,
-      y: 1.08,
-      w: 2.85,
-      h: 5.65,
-      fill: { color: colors.panel2, transparency: 18 },
-      line: { color: colors.line, transparency: 55 },
     });
     return;
   }
@@ -507,7 +492,7 @@ function paintBackground(page: PptxGenJS.Slide, accent: Accent, index: number, t
 }
 
 function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent, template: DeckTemplate) {
-  addHeader(page, slide, index, total, accent);
+  addHeader(page, slide, index, total, accent, slide.layout !== "cover");
 
   if (slide.layout === "cover") {
     renderCover(page, slide, accent, template);
@@ -611,19 +596,21 @@ function renderSlide(page: PptxGenJS.Slide, slide: DeckSlide, index: number, tot
   renderContent(page, slide, accent, template);
 }
 
-function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent) {
-  page.addText(slide.kicker || "DeckEvo", {
-    x: 0.72,
-    y: 0.48,
-    w: 7.6,
-    h: 0.24,
-    fontFace: fontSet.head,
-    fontSize: 8,
-    bold: true,
-    color: colors[accent],
-    margin: 0,
-    breakLine: false,
-  });
+function addHeader(page: PptxGenJS.Slide, slide: DeckSlide, index: number, total: number, accent: Accent, showKicker = true) {
+  if (showKicker) {
+    page.addText(slide.kicker || "DeckEvo", {
+      x: 0.72,
+      y: 0.48,
+      w: 7.6,
+      h: 0.24,
+      fontFace: fontSet.head,
+      fontSize: 8,
+      bold: true,
+      color: colors[accent],
+      margin: 0,
+      breakLine: false,
+    });
+  }
   page.addText(`${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`, {
     x: 11.1,
     y: 0.44,
@@ -1118,8 +1105,8 @@ function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: numb
         y: 1.08,
         w: 3.8,
         h: 1.58,
-        fill: { color: colors[accent], transparency: 4 },
-        line: { color: colors[accent], transparency: 10 },
+        fill: { color: panelFill, transparency: isLight ? 2 : 8 },
+        line: { color: colors[accent], transparency: 35 },
       });
       page.addText(normalizeTextValue(slide.metric.value), {
         x: 7.92,
@@ -1129,7 +1116,7 @@ function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: numb
         fit: "shrink",
         fontSize: 24,
         bold: true,
-        color: colors.bg,
+        color: colors.text,
         margin: 0,
       });
       page.addText(normalizeTextValue(slide.metric.label || slide.metric.context), {
@@ -1139,7 +1126,7 @@ function renderClaudeCanvas(page: PptxGenJS.Slide, slide: DeckSlide, index: numb
         h: 0.24,
         fit: "shrink",
         fontSize: 9,
-        color: colors.bg,
+        color: colors.muted,
         margin: 0,
       });
     }
@@ -1174,10 +1161,10 @@ function renderSmartisanKeynoteCanvas(page: PptxGenJS.Slide, slide: DeckSlide, i
   const items = fallbackSlideItems(slide, 4);
   const seed = textSeed(`${slide.title}|${slide.subtitle || ""}|${slide.visual || ""}|${items.join("|")}|${index}`);
   const variant = seed % 6;
-  const lightPage = index % 5 === 2;
-  const titleColor = lightPage ? "111111" : colors.text;
-  const mutedColor = lightPage ? "5F5A52" : colors.muted;
-  const lineColor = lightPage ? "B69A64" : colors[accent];
+  const lightPage = false;
+  const titleColor = "F6F1E8";
+  const mutedColor = "D8D1C6";
+  const lineColor = colors[accent];
   const titleLen = visualLength(slide.title);
   const titleSize = titleLen > 40 ? 31 : titleLen > 30 ? 38 : titleLen > 20 ? 46 : 56;
 
@@ -1328,10 +1315,10 @@ function renderKeynoteSubtitle(page: PptxGenJS.Slide, text: string | undefined, 
     x,
     y,
     w,
-    h: 0.32,
+    h: 0.42,
     fit: "shrink",
     fontFace: fontSet.body,
-    fontSize: denseTextFontSize(clean, 14),
+    fontSize: denseTextFontSize(clean, 16),
     color,
     margin: 0,
   });
@@ -1339,15 +1326,15 @@ function renderKeynoteSubtitle(page: PptxGenJS.Slide, text: string | undefined, 
 
 function renderKeynoteBullets(page: PptxGenJS.Slide, items: string[], x: number, y: number, w: number, titleColor: string, mutedColor: string, lineColor: string) {
   items.slice(0, 4).forEach((item, index) => {
-    const top = y + index * 0.64;
+    const top = y + index * 0.74;
     page.addText(index === 0 ? compactText(item, 76) : compactText(item, 96), {
       x,
       y: top,
       w,
-      h: 0.34,
+      h: 0.44,
       fit: "shrink",
       fontFace: fontSet.body,
-      fontSize: denseTextFontSize(item, index === 0 ? 15 : 12.5),
+      fontSize: denseTextFontSize(item, index === 0 ? 17 : 14.5),
       bold: index === 0,
       color: index === 0 ? titleColor : mutedColor,
       margin: 0,
@@ -2730,20 +2717,20 @@ function addTakeaway(page: PptxGenJS.Slide, takeaway: string | undefined, accent
   const text = normalizeTextValue(takeaway);
   if (!text) return;
   page.addShape("rect", {
-    x: 0.78,
-    y: 6.02,
-    w: 10.6,
-    h: 0.54,
-    fill: { color: colors[accent], transparency: 82 },
-    line: { color: colors[accent], transparency: 28 },
+    x: 0.9,
+    y: 6.56,
+    w: 10.95,
+    h: 0.34,
+    fill: { color: colors[accent], transparency: 90 },
+    line: { color: colors[accent], transparency: 58 },
   });
   page.addText(text, {
-    x: 1.05,
-    y: 6.16,
-    w: 9.9,
-    h: 0.24,
+    x: 1.14,
+    y: 6.64,
+    w: 10.42,
+    h: 0.14,
     fit: "shrink",
-    fontSize: 10,
+    fontSize: 8.5,
     bold: true,
     color: colors.text,
     margin: 0,

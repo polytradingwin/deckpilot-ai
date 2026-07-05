@@ -12,7 +12,7 @@ import {
 } from "./sourceGrounding";
 import { isOpenAIQuotaOrRateLimit } from "./userErrors";
 
-export const DEFAULT_MODEL = "gpt-5.2";
+export const DEFAULT_MODEL = "gpt-5.5";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const FALLBACK_MODELS = ["gpt-5.1", "gpt-5-mini"];
 let configuredProxy: string | null = null;
@@ -725,8 +725,7 @@ function pickVisualDirection(input: PresentationRequest, sourceMaterial = "") {
     "dataGrid: evidence-rich operating deck, visible grid system, compact modules, clear charts only when numbers exist",
   ];
 
-  const pool = candidates.length ? candidates : fallback;
-  return pool[Math.floor(Math.random() * pool.length)];
+  return "smartisanKeynote: Xu Cen / Luo Yonghao Smartisan-style dark keynote. Use a cinematic black canvas, huge conclusion-first Chinese typography, restrained gold/gray/red accents, strong whitespace, and one edited idea per slide. Keep content faithful while varying composition inside this dark keynote system.";
 }
 
 function buildAutoDesignGuidance(input: PresentationRequest, sourceMaterial: string) {
@@ -740,8 +739,9 @@ function buildAutoDesignGuidance(input: PresentationRequest, sourceMaterial: str
   return [
     sourceMode,
     deliveryMode,
-    "Default aesthetic target: Xu Cen / Luo Yonghao Smartisan keynote style. Make it feel like a refined product-launch presentation: cinematic, sparse, witty, conclusion-first, highly edited, and confident.",
-    "Use very large Chinese titles, strong whitespace, minimal ornaments, controlled black/warm-white/gold or black/white/red accents, and one clear idea per page.",
+    "Mandatory aesthetic target: Xu Cen / Luo Yonghao Smartisan keynote style. Make it feel like a refined product-launch presentation: cinematic, sparse, witty, conclusion-first, highly edited, and confident.",
+    "Always use a dark keynote system. Do not use white, beige, warm-white, editorialLight, academicPaper, corporateClean, or generic consulting report backgrounds.",
+    "Set theme.template to smartisanKeynote. Use very large Chinese titles, strong whitespace, minimal ornaments, controlled black/gold/gray/red accents, and one clear idea per page.",
     "Avoid consulting-style card grids, dashboard boxes, signal/evidence/risk/action frames, and generic business report templates unless the source absolutely requires them.",
     "Infer the best visual direction from the material itself. Do not force consulting/product/brand/academic templates.",
     "Prefer Claude-canvas pages: each slide should have a bespoke composition brief, not a named template. Use named page types only when the source structure requires them.",
@@ -1489,7 +1489,7 @@ function compactPromptText(value: unknown, maxLength: number) {
 
 function normalizeTheme(theme: DeckSpec["theme"] | undefined, input: PresentationRequest): DeckSpec["theme"] {
   const detectedBrandColors = detectBrandColors(input.prompt);
-  const template = theme?.template || defaultTemplate(input);
+  const template = "smartisanKeynote";
   const accent = theme?.accent || defaultAccentForTemplate(template);
   const density = theme?.density || (input.slides >= 16 ? "dense" : input.slides <= 6 ? "calm" : "balanced");
   return {
@@ -1651,6 +1651,7 @@ function fallbackTitle(input: PresentationRequest, index: number) {
 function createMockDeck(input: PresentationRequest): DeckSpec {
   const title = fallbackTitle(input, 0);
   const requestedSlides = resolveRequestedSlideCount(input);
+  const sourceAnchors = input.source === "ppt" ? (input.sourceAnchors || []).slice(0, 24) : [];
   const baseSlides: DeckSpec["slides"] = [
     {
       layout: "cover",
@@ -1721,6 +1722,12 @@ function createMockDeck(input: PresentationRequest): DeckSpec {
       title: `补充页面 ${baseSlides.length}`,
       body: ["核心观点", "支撑证据", "业务影响", "执行建议"],
     });
+  }
+
+  if (sourceAnchors.length) {
+    baseSlides[0].subtitle = [baseSlides[0].subtitle, sourceAnchors.join(" ")].filter(Boolean).join(" · ");
+    const targetSlide = baseSlides[1] || baseSlides[0];
+    targetSlide.body = [...(targetSlide.body || []), ...sourceAnchors];
   }
 
   return {

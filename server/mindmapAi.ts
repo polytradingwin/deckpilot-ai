@@ -253,6 +253,7 @@ function buildSystemPrompt() {
     "The mindmap should grow like a tree: one central conclusion, several main branches, and smaller sub-branches.",
     "Screen nodes must be presentation-grade: short phrases, key numbers, and crisp labels only. Put fuller prose in completeReport, not inside node cards.",
     "The first summary node must be concise and striking: one short headline plus metrics. Do not put a long paragraph on the cover node.",
+    "Never use ellipsis characters, three dots, or truncation markers in any title, subtitle, headline, detail, or body text.",
     "If the source includes ROI, budget, revenue target, or percentage figures, preserve them exactly in summary.keyMetrics so the renderer can show them without truncation.",
     "The mindmap should feel like a senior consultant explaining a complex report: clear hierarchy, strong executive summary, and complete source coverage.",
     "Avoid generic frameworks unless the source naturally requires them. Each node must be specific to the user's material.",
@@ -274,7 +275,8 @@ function buildUserPrompt(input: MindMapRequest) {
     "- Use child nodes for details, examples, metrics, actions, or evidence.",
     "- Make each node title short: ideally 8-18 Chinese characters or 3-8 English words.",
     "- Make subtitles and details concise. Avoid long sentences in nodes.",
-    "- The summary.headline should be a compact first-screen hook, preferably under 18 Chinese characters. Put numbers such as ROI, budget, and target in summary.keyMetrics.",
+    "- The summary.headline should be a compact first-screen hook, preferably 8-14 Chinese characters or 3-6 English words. Put numbers such as ROI, budget, and target in summary.keyMetrics.",
+    "- Do not write ellipses, three dots, or any placeholder-like truncated text.",
     "- Put detailed explanations in completeReport instead of overloading the mindmap nodes.",
     "- Keep every explicit source section represented somewhere in nodes or completeReport.",
     "- Extract important numbers into summary.keyMetrics when present, especially ROI, budget, percentages, targets, and time periods.",
@@ -395,8 +397,10 @@ function cleanText(value: unknown) {
   return String(value || "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
+    .replace(/[.…]+/g, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/[，,。；;、:：|｜\s]+$/g, "");
 }
 
 function inferTitle(prompt: string) {

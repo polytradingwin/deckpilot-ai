@@ -8,6 +8,7 @@ import { createCanvaAuthorizationUrl, getCanvaRuntimeStatus, handleCanvaOAuthCal
 import { createSignedPptxUpload } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
 import { createMindMapWithAI } from "./mindmapAi";
+import { renderMindMapOfflineHtml } from "./mindmapOfflineHtml";
 import { renderMindMapFullHtml, renderMindMapSummaryHtml } from "./mindmapHtml";
 import { findMindMapGeneration, listMindMapGenerations, saveMindMapGeneration } from "./mindmapStore";
 import { extractTextFromPptx } from "./pptxReader";
@@ -261,6 +262,22 @@ app.get("/api/mindmaps/:id/full", async (req, res) => {
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(renderMindMapFullHtml(generation.spec));
+});
+
+app.get("/api/mindmaps/:id/offline", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const generation = await findMindMapGeneration(user.id, String(req.params.id || ""));
+  if (!generation) {
+    res.status(404).send("MindMap generation not found.");
+    return;
+  }
+
+  const asciiFilename = safeAsciiFilename(generation.record.title || "deckevo-mindmap");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${asciiFilename}-${generation.record.id.slice(0, 8)}.html"`);
+  res.send(renderMindMapOfflineHtml(generation.spec));
 });
 
 app.get("/api/generations/:id/download", async (req, res) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import JSZip from "jszip";
 import {
   ArrowRight,
@@ -258,8 +258,8 @@ const localizedContent = {
       back: "返回",
       liveAudience: "现场听众",
       readingAudience: "阅读对象",
-      generate: "生成 PPT",
-      regenerating: "重新生成 PPT",
+      generate: "生成PPT",
+      regenerating: "重新生成PPT",
       generating: "生成中",
       completed: "已完成",
       previewLabel: "生成结果预览",
@@ -877,18 +877,12 @@ function App() {
   const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const purpose = deliveryPurposeMap[deliveryMode];
-  const slideTitles = useMemo(
-    () => content.deliverySlideMap[deliveryMode] || content.slideMap[purpose],
-    [content.deliverySlideMap, content.slideMap, deliveryMode, purpose],
-  );
   const inferredSlides = source === "ppt" ? sourceSlideCount || 12 : estimateOutlineSlides(prompt);
   const outputLanguage = ui.outputLanguage;
   const accountName = user?.email.split("@")[0] || "";
   const sourceOptions = content.sourceOptions;
   const deliveryOptions = content.deliveryOptions;
   const pricingPlans = content.pricingPlans;
-  const qualityItems = content.qualityItems;
-  const beforeAfterCases = content.beforeAfterCases;
   const faqs = content.faqs;
   const currentPolicyContent = localizedPolicyContent[uiLanguage];
   const pricingPlanIds = ["starter", "monthly", "pro"];
@@ -908,7 +902,6 @@ function App() {
           resultReady: "脑图已生成，可以查看或导出。",
           recentMindMaps: "最近脑图",
           nodes: "节点",
-          mindmapPreview: "MindMap preview",
           mindmapStepHeads: ["输入要拆解的文稿", "这份脑图是给人讲，还是给人看？", "生成动态脑图汇报"],
           mindmapSteps: ["输入文稿", "汇报对象", "生成脑图"],
           mindmapNeedPrompt: "请先输入文稿内容。",
@@ -927,13 +920,14 @@ function App() {
           resultReady: "MindMap is ready. You can view or export it.",
           recentMindMaps: "Recent MindMaps",
           nodes: "nodes",
-          mindmapPreview: "MindMap preview",
           mindmapStepHeads: ["Enter source material", "Is this for presenting or reading?", "Generate dynamic MindMap report"],
           mindmapSteps: ["Source text", "Audience", "Generate"],
           mindmapNeedPrompt: "Please enter source material first.",
         };
-  const currentStepHeads = productMode === "mindmap" ? modeText.mindmapStepHeads : ui.stepHeads;
-  const currentSteps = productMode === "mindmap" ? modeText.mindmapSteps : ui.steps;
+  const stepHeadsForMode = productMode === "mindmap" ? modeText.mindmapStepHeads : ui.stepHeads;
+  const stepsForMode = productMode === "mindmap" ? modeText.mindmapSteps : ui.steps;
+  const currentStepHeads = stepHeadsForMode.slice(0, 2);
+  const currentSteps = stepsForMode.slice(0, 2);
   const billingText =
     uiLanguage === "zh"
       ? {
@@ -954,6 +948,12 @@ function App() {
   useEffect(() => {
     void refreshSession();
   }, []);
+
+  useEffect(() => {
+    if (step > currentSteps.length) {
+      setStep(currentSteps.length);
+    }
+  }, [currentSteps.length, step]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -1306,28 +1306,34 @@ function App() {
       "",
       deliveryPrompt,
     ].join("\n");
+    const submitDirectFileGeneration = () => {
+      const formData = new FormData();
+      formData.append("source", source);
+      formData.append("purpose", purpose);
+      formData.append("style", autoStyle);
+      formData.append("slides", String(inferredSlides));
+      formData.append("language", outputLanguage);
+      formData.append("audience", generationAudience);
+      formData.append("prompt", generationPrompt);
+      if (selectedFile) formData.append("file", selectedFile);
+      setGenerationError(ui.errors.queued);
+      return generationApiFetch({
+        method: "POST",
+        body: formData,
+      });
+    };
 
     if (source === "ppt" && selectedFile) {
       if (selectedFile.size > signedUploadLimitBytes) {
         setGenerationError(ui.errors.uploading);
-        const formData = new FormData();
-        formData.append("source", source);
-        formData.append("purpose", purpose);
-        formData.append("style", autoStyle);
-        formData.append("slides", String(inferredSlides));
-        formData.append("language", outputLanguage);
-        formData.append("audience", generationAudience);
-        formData.append("prompt", generationPrompt);
-        formData.append("file", selectedFile);
-        setGenerationError(ui.errors.queued);
-        return generationApiFetch({
-          method: "POST",
-          body: formData,
-        });
+        return submitDirectFileGeneration();
       }
 
       setGenerationError(ui.errors.uploading);
-      const sourceFile = await uploadSourcePptx(selectedFile);
+      const sourceFile = await uploadSourcePptx(selectedFile).catch(() => null);
+      if (!sourceFile) {
+        return submitDirectFileGeneration();
+      }
       setGenerationError(ui.errors.queued);
       return generationApiFetch({
         method: "POST",
@@ -1610,7 +1616,7 @@ function App() {
           })}
         </div>
 
-        <div className="generator-shell">
+        <div className="generator-shell generator-single">
           <div className="generator-workspace">
             <div className="panel-heading">
               <div>
@@ -1698,29 +1704,13 @@ function App() {
                   <button className="text-button" type="button" onClick={() => setStep(1)}>
                     {ui.previous}
                   </button>
-                  <button className="primary-button" type="button" onClick={() => setStep(3)}>
-                    {ui.next}
-                    <ArrowRight size={18} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="step-body">
-                <div className="auto-design-card">
-                  <Sparkles size={24} />
-                  <div>
-                    <strong>{ui.autoDesignTitle}</strong>
-                    <p>{ui.autoDesignBody}</p>
-                  </div>
-                </div>
-
-                <div className="panel-actions split">
-                  <button className="outline-button back-action" type="button" onClick={() => setStep(2)}>
-                    {ui.back}
-                  </button>
-                  <button className="primary-button" type="button" onClick={handleGenerate} data-generate-button="true">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                    data-generate-button="true"
+                  >
                     {isGenerating
                       ? ui.generating
                       : productMode === "mindmap"
@@ -1735,217 +1725,84 @@ function App() {
                 </div>
 
                 {generationError && <p className={`status-message ${generated ? "complete" : "pending"}`}>{generationError}</p>}
-                {productMode === "mindmap" && mindMapRecord && mindMapSpec && (
-                  <div className="mindmap-result-card">
-                    <strong>{modeText.resultReady}</strong>
-                    <div className="mindmap-result-actions">
-                      <a
-                        className="download-button secondary-export"
-                        href="#mindmap-preview-pane"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          void document.documentElement.requestFullscreen?.().catch(() => undefined);
-                          setMindMapStageOpen(true);
-                        }}
-                      >
-                        <Eye size={17} />
-                        {modeText.presentMindMap}
-                      </a>
-                      <a
+                {productMode === "ppt" && generated && (
+                  <div className="mindmap-result-card deck-result-card" id="deck-result">
+                    <strong>{ui.saved}</strong>
+                    <div className="mindmap-result-actions deck-result-actions">
+                      <button
                         className="download-button"
-                        href={apiPath(`/api/mindmaps/${mindMapRecord.id}/summary`)}
-                        target="_blank"
-                        rel="noreferrer"
+                        type="button"
+                        disabled={!downloadUrl || isGenerating}
+                        onClick={() => downloadDeck()}
                       >
                         <Download size={17} />
-                        {modeText.exportSummary}
-                      </a>
-                      <a
-                        className="download-button secondary-export"
-                        href={apiPath(`/api/mindmaps/${mindMapRecord.id}/full`)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Download size={17} />
-                        {modeText.exportFull}
-                      </a>
+                        {downloadUrl ? ui.downloadAgain : ui.download}
+                      </button>
                     </div>
                   </div>
+                )}
+                {productMode === "mindmap" && mindMapRecord && mindMapSpec && (
+                  <>
+                    <div className="mindmap-result-card" id="mindmap-result">
+                      <strong>{modeText.resultReady}</strong>
+                      <div className="mindmap-result-actions">
+                        <a
+                          className="download-button secondary-export"
+                          href="#mindmap-result"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            void document.documentElement.requestFullscreen?.().catch(() => undefined);
+                            setMindMapStageOpen(true);
+                          }}
+                        >
+                          <Eye size={17} />
+                          {modeText.presentMindMap}
+                        </a>
+                        <a
+                          className="download-button"
+                          href={apiPath(`/api/mindmaps/${mindMapRecord.id}/summary`)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Download size={17} />
+                          {modeText.exportSummary}
+                        </a>
+                        <a
+                          className="download-button secondary-export"
+                          href={apiPath(`/api/mindmaps/${mindMapRecord.id}/full`)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Download size={17} />
+                          {modeText.exportFull}
+                        </a>
+                        <a
+                          className="download-button secondary-export"
+                          href={apiPath(`/api/mindmaps/${mindMapRecord.id}/offline`)}
+                          download
+                        >
+                          <Download size={17} />
+                          {uiLanguage === "zh" ? "下载离线 HTML" : "Download offline HTML"}
+                        </a>
+                      </div>
+                    </div>
+                    <div className="mindmap-main-presenter">
+                      <MindMapPresenter spec={mindMapSpec} />
+                    </div>
+                  </>
                 )}
               </div>
             )}
+
           </div>
 
-          <aside className="preview-pane" id="mindmap-preview-pane" aria-label={ui.previewLabel}>
-            <div className="preview-topline">
-              <span>{productMode === "mindmap" ? modeText.mindmapPreview : "Deck preview"}</span>
-              <strong>{generated ? "Ready" : isGenerating ? "Generating" : "Draft"}</strong>
-            </div>
-            <div className="credit-panel">
-              {user ? (
-                <>
-                  <span>{ui.currentAccount}</span>
-                  <strong>{user.creditsRemaining} {ui.creditsLeft}</strong>
-                  <small>
-                    {ui.used} {user.creditsUsed} / {user.creditsTotal}
-                  </small>
-                </>
-              ) : (
-                <>
-                  <span>{ui.accountAnon}</span>
-                  <strong>{ui.loginToGenerate}</strong>
-                  <small>{ui.accountHint}</small>
-                </>
-              )}
-            </div>
-            {productMode === "mindmap" ? (
-              <>
-                {mindMapSpec ? (
-                  <MindMapPresenter spec={mindMapSpec} />
-                ) : (
-                  <div className={`deck-canvas mindmap-empty ${isGenerating ? "loading" : ""}`}>
-                    <div className="deck-cover">
-                      <span>{modeText.mindmap}</span>
-                      <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
-                      <p>{modeText.mindmapIntro}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mindmap-export-actions">
-                  <a
-                    className="download-button"
-                    href={mindMapRecord ? apiPath(`/api/mindmaps/${mindMapRecord.id}/summary`) : undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-disabled={!mindMapRecord || isGenerating}
-                  >
-                    <Download size={17} />
-                    {modeText.exportSummary}
-                  </a>
-                  <a
-                    className="download-button secondary-export"
-                    href={mindMapRecord ? apiPath(`/api/mindmaps/${mindMapRecord.id}/full`) : undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-disabled={!mindMapRecord || isGenerating}
-                  >
-                    <Download size={17} />
-                    {modeText.exportFull}
-                  </a>
-                </div>
-
-                {recentMindMaps.length > 0 && (
-                  <div className="history-list" aria-label={modeText.recentMindMaps}>
-                    <div className="history-heading">
-                      <span>{modeText.recentMindMaps}</span>
-                      {mindMapRecord && <strong>{ui.saved}</strong>}
-                    </div>
-                    {recentMindMaps.map((item) => (
-                      <button className="history-row" type="button" key={item.id} onClick={() => void loadMindMap(item.id)}>
-                        <span>{item.title}</span>
-                        <small>
-                          {item.nodeCount} {modeText.nodes} · {formatGenerationTime(item.createdAt, uiLanguage)}
-                        </small>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className={`deck-canvas ${isGenerating ? "loading" : ""}`}>
-                  <div className="deck-cover">
-                    <span>{ui.autoDesign}</span>
-                    <h3>{deliveryOptions.find((item) => item.id === deliveryMode)?.title}</h3>
-                    <p>{ui.autoSlidesLanguage}</p>
-                  </div>
-                  <div className="chart-row">
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </div>
-
-                <div className="slide-list">
-                  {slideTitles.map((title, index) => (
-                    <div className="slide-row" key={title}>
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      <p>{title}</p>
-                      {generated && <Check size={16} />}
-                    </div>
-                  ))}
-                </div>
-
-                <button className="download-button" type="button" disabled={!downloadUrl || isGenerating} onClick={() => downloadDeck()}>
-                  <Download size={17} />
-                  {downloadUrl ? ui.downloadAgain : ui.download}
-                </button>
-
-                {recentGenerations.length > 0 && (
-                  <div className="history-list" aria-label={ui.recent}>
-                    <div className="history-heading">
-                      <span>{ui.recent}</span>
-                      {generationId && <strong>{ui.saved}</strong>}
-                    </div>
-                    {recentGenerations.map((item) => (
-                      <a className="history-row" href={apiPath(`/api/generations/${item.id}/download`)} key={item.id}>
-                        <span>{item.title}</span>
-                        <small>
-                          {item.slideCount} {ui.pages} · {formatGenerationTime(item.createdAt, uiLanguage)}
-                        </small>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </aside>
         </div>
       </section>
 
-      <section className="quality-section" id="gallery">
-        <div className="section-heading">
-          <p className="section-kicker">Quality system</p>
-          <h2>{ui.qualityTitle}</h2>
-        </div>
-        <div className="quality-grid">
-          {qualityItems.map((item, index) => (
-            <article className="quality-item" key={item.title}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="case-gallery" aria-label={ui.casesLabel}>
-          {beforeAfterCases.map((item) => (
-            <article className="case-card" key={item.title}>
-              <div className="case-card-head">
-                <span>{ui.beforeAfter}</span>
-                <h3>{item.title}</h3>
-              </div>
-              <div className="case-compare">
-                <div>
-                  <small>{ui.before}</small>
-                  <p>{item.before}</p>
-                </div>
-                <div>
-                  <small>{ui.after}</small>
-                  <p>{item.after}</p>
-                </div>
-              </div>
-              <strong>{item.result}</strong>
-            </article>
-          ))}
-        </div>
-
-        <div className="gallery-strip" aria-label={ui.galleryLabel}>
-          <SlideThumb tone="gold" title="Market" />
-          <SlideThumb tone="cyan" title="Strategy" />
-          <SlideThumb tone="sage" title="Metrics" />
+      <section className="case-placeholder-section" id="gallery" aria-label={ui.casesLabel}>
+        <div className="case-placeholder-grid" aria-hidden="true">
+          <div />
+          <div />
         </div>
       </section>
 
@@ -2193,7 +2050,7 @@ function App() {
       )}
 
       {mindMapStageOpen && mindMapSpec && (
-        <div className="mindmap-stage-backdrop" role="dialog" aria-modal="true" aria-label={modeText.mindmapPreview}>
+        <div className="mindmap-stage-backdrop" role="dialog" aria-modal="true" aria-label={modeText.openMindMap}>
           <button
             className="mindmap-stage-close"
             type="button"
@@ -2203,7 +2060,7 @@ function App() {
             }}
             aria-label={ui.close}
           >
-            <X size={22} />
+            <X size={30} />
           </button>
           <MindMapPresenter spec={mindMapSpec} immersive />
         </div>
@@ -2229,23 +2086,6 @@ function SelectButton<T extends string>({
       <strong>{item.title}</strong>
       <span>{item.description}</span>
     </button>
-  );
-}
-
-function SlideThumb({ tone, title }: { tone: "gold" | "cyan" | "sage"; title: string }) {
-  return (
-    <article className={`slide-thumb ${tone}`}>
-      <div>
-        <span>{title}</span>
-        <strong />
-        <strong />
-      </div>
-      <div className="mini-chart">
-        <span />
-        <span />
-        <span />
-      </div>
-    </article>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import type { MindMapNode, MindMapSpec } from "../shared/mindmap";
 
 type MindMapPresenterProps = {
@@ -29,6 +29,8 @@ type DragState = {
   baseY: number;
 };
 
+type EditableNodeField = "title" | "subtitle" | "detail";
+
 const stage = {
   width: 3200,
   baseHeight: 1100,
@@ -40,18 +42,18 @@ const stage = {
 };
 
 const rootTone = {
-  accent: "#e1b451",
-  surface: "#0e3b44",
-  soft: "rgba(225, 180, 81, 0.18)",
+  accent: "#f0bd53",
+  surface: "#0b3f49",
+  soft: "rgba(240, 189, 83, 0.20)",
 };
 
 const nodeTones = [
-  { accent: "#e0a431", surface: "#f9f7ef", soft: "rgba(224, 164, 49, 0.16)" },
-  { accent: "#8fb7aa", surface: "#f5faf5", soft: "rgba(143, 183, 170, 0.18)" },
-  { accent: "#d18b6a", surface: "#fbf5ef", soft: "rgba(209, 139, 106, 0.16)" },
-  { accent: "#7fa0b8", surface: "#f3f7fb", soft: "rgba(127, 160, 184, 0.18)" },
-  { accent: "#b5a065", surface: "#faf7ef", soft: "rgba(181, 160, 101, 0.18)" },
-  { accent: "#a3aa80", surface: "#f7f8ef", soft: "rgba(163, 170, 128, 0.18)" },
+  { accent: "#e7a93f", surface: "#fff4d6", soft: "rgba(231, 169, 63, 0.24)" },
+  { accent: "#2f9c8f", surface: "#e9f8f2", soft: "rgba(47, 156, 143, 0.22)" },
+  { accent: "#d2785d", surface: "#fff0e8", soft: "rgba(210, 120, 93, 0.22)" },
+  { accent: "#507daa", surface: "#edf4ff", soft: "rgba(80, 125, 170, 0.22)" },
+  { accent: "#9f7ad8", surface: "#f4efff", soft: "rgba(159, 122, 216, 0.20)" },
+  { accent: "#809746", surface: "#f1f6df", soft: "rgba(128, 151, 70, 0.22)" },
 ];
 
 export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterProps) {
@@ -60,6 +62,8 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const [zoom, setZoom] = useState(immersive ? 0.98 : 0.44);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [nodeEdits, setNodeEdits] = useState<Record<string, Partial<Pick<MapItem, EditableNodeField>>>>({});
+  const [deletedNodeIds, setDeletedNodeIds] = useState<Set<string>>(() => new Set());
   const [viewport, setViewport] = useState({
     width: immersive ? window.innerWidth : 720,
     height: immersive ? Math.max(520, window.innerHeight - 88) : 520,
@@ -68,9 +72,10 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const wheelLockUntil = useRef(0);
   const wheelResetTimer = useRef<number | null>(null);
   const drag = useRef<DragState | null>(null);
-  const visibleItems = model.items.slice(0, activeIndex + 1);
-  const active = visibleItems[visibleItems.length - 1] || model.items[0];
-  const displayItems = visibleItems.map((item, index) => ({ item, index }));
+  const visibleModelItems = model.items.filter((item) => !deletedNodeIds.has(item.id));
+  const visibleItems = visibleModelItems.slice(0, activeIndex + 1);
+  const displayItems = visibleItems.map((item, index) => ({ item: applyNodeEdits(item, nodeEdits), index }));
+  const active = displayItems[displayItems.length - 1]?.item || model.items[0];
   const visibleIds = new Set(displayItems.map((entry) => entry.item.id));
   const visibleLinks = model.links.filter((link) => visibleIds.has(link.from) && visibleIds.has(link.to));
   const viewportHeight = viewport.height;
@@ -79,7 +84,7 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   const translateY = viewportHeight / 2 - active.y * zoom + pan.y;
 
   const go = (direction: -1 | 1) => {
-    setActiveIndex((current) => clamp(current + direction, 0, model.items.length - 1));
+    setActiveIndex((current) => clamp(current + direction, 0, visibleModelItems.length - 1));
   };
 
   useEffect(() => {
@@ -95,17 +100,28 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   }, [immersive]);
 
   useEffect(() => {
-    setActiveIndex((current) => clamp(current, 0, model.items.length - 1));
-  }, [model.items.length]);
+    setActiveIndex((current) => clamp(current, 0, visibleModelItems.length - 1));
+  }, [visibleModelItems.length]);
 
   useEffect(() => {
     setPan({ x: 0, y: 0 });
   }, [activeIndex, model]);
 
   useEffect(() => {
+    setNodeEdits({});
+    setDeletedNodeIds(new Set());
+  }, [spec]);
+
+  useEffect(() => {
     if (!immersive) return;
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest("input,textarea,[contenteditable='true']")) return;
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        deleteActiveNode();
+        return;
+      }
       if (["ArrowDown", "ArrowRight", "PageDown", " "].includes(event.key)) {
         event.preventDefault();
         go(1);
@@ -118,7 +134,7 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [immersive, model.items.length]);
+  }, [active.id, immersive, model.items.length, visibleModelItems.length]);
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     if (Math.abs(event.deltaY) < 2) return;
@@ -141,8 +157,8 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (!immersive || event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("button,input")) return;
+    if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button,input,[contenteditable='true']")) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = {
@@ -169,6 +185,39 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
     drag.current = null;
     setIsPanning(false);
   };
+
+  const commitNodeText = (id: string, field: EditableNodeField, value: string) => {
+    setNodeEdits((current) => ({
+      ...current,
+      [id]: {
+        ...current[id],
+        [field]: value.trim(),
+      },
+    }));
+  };
+
+  const deleteNode = (target: MapItem) => {
+    if (!target || target.depth === 0) return;
+    const idsToDelete = new Set<string>([target.id]);
+    model.items.forEach((item) => {
+      let parentId = item.parentId;
+      while (parentId) {
+        if (parentId === target.id) {
+          idsToDelete.add(item.id);
+          break;
+        }
+        parentId = model.byId.get(parentId)?.parentId;
+      }
+    });
+    setDeletedNodeIds((current) => {
+      const next = new Set(current);
+      idsToDelete.forEach((id) => next.add(id));
+      return next;
+    });
+    setActiveIndex((current) => Math.max(0, current - 1));
+  };
+
+  const deleteActiveNode = () => deleteNode(active);
 
   return (
     <div className={`mindmap-presenter ${immersive ? "immersive" : ""} ${isPanning ? "panning" : ""}`} aria-label="MindMap preview">
@@ -226,10 +275,11 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
             const size = nodeSize(item);
             const isActive = index === activeIndex;
             return (
-              <button
+              <div
                 className={`map-node depth-${item.depth} ${isActive ? "active" : ""}`}
                 key={item.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 style={{
                   left: item.x - size.width / 2,
                   top: item.y - size.height / 2,
@@ -239,15 +289,61 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
                   "--node-surface": item.surface,
                   "--node-soft": item.soft,
                 } as CSSProperties}
-                onClick={() => setActiveIndex(index)}
+                onClick={(event) => {
+                  if (event.target instanceof Element && event.target.closest("[contenteditable='true']")) return;
+                  setActiveIndex(index);
+                }}
+                onKeyDown={(event) => {
+                  if (event.target instanceof Element && event.target.closest("[contenteditable='true']")) return;
+                  if (event.key === "Backspace") {
+                    event.preventDefault();
+                    deleteNode(item);
+                    return;
+                  }
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setActiveIndex(index);
+                  }
+                }}
               >
                 {item.badge && <em className="node-badge">{item.badge}</em>}
                 <span className="node-copy">
-                  {item.subtitle && <span>{item.subtitle}</span>}
-                  <strong>{item.title}</strong>
-                  {item.detail && <small>{item.detail}</small>}
+                  {item.subtitle && (
+                    <span
+                      className="editable-node-text"
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(event) => commitNodeText(item.id, "subtitle", event.currentTarget.textContent || "")}
+                      onKeyDown={handleEditableKeyDown}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      {item.subtitle}
+                    </span>
+                  )}
+                  <strong
+                    className="editable-node-text"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(event) => commitNodeText(item.id, "title", event.currentTarget.textContent || "")}
+                    onKeyDown={handleEditableKeyDown}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    {item.title}
+                  </strong>
+                  {item.detail && (
+                    <small
+                      className="editable-node-text"
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={(event) => commitNodeText(item.id, "detail", event.currentTarget.textContent || "")}
+                      onKeyDown={handleEditableKeyDown}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      {item.detail}
+                    </small>
+                  )}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -257,19 +353,48 @@ export function MindMapPresenter({ spec, immersive = false }: MindMapPresenterPr
         <button type="button" onClick={() => go(-1)}>上一页</button>
         <input
           aria-label="MindMap node"
-          max={model.items.length - 1}
+          max={visibleModelItems.length - 1}
           min={0}
           type="range"
           value={activeIndex}
           onChange={(event) => setActiveIndex(Number(event.target.value))}
         />
         <button type="button" onClick={() => go(1)}>下一页</button>
+        {immersive && (
+          <button
+            type="button"
+            onClick={() => {
+              if (document.fullscreenElement) {
+                void document.exitFullscreen?.().catch(() => undefined);
+              } else {
+                void document.documentElement.requestFullscreen?.().catch(() => undefined);
+              }
+            }}
+          >
+            全屏
+          </button>
+        )}
         <strong>
-          {String(activeIndex + 1).padStart(2, "0")} / {String(model.items.length).padStart(2, "0")}
+          {String(activeIndex + 1).padStart(2, "0")} / {String(visibleModelItems.length).padStart(2, "0")}
         </strong>
       </div>
     </div>
   );
+}
+
+function applyNodeEdits(item: MapItem, edits: Record<string, Partial<Pick<MapItem, EditableNodeField>>>): MapItem {
+  return {
+    ...item,
+    ...(edits[item.id] || {}),
+  };
+}
+
+function handleEditableKeyDown(event: KeyboardEvent<HTMLElement>) {
+  event.stopPropagation();
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.currentTarget.blur();
+  }
 }
 
 function buildMapModel(spec: MindMapSpec) {
@@ -400,19 +525,18 @@ function compactMetricLine(spec: MindMapSpec) {
     .map((metric) => [metric.label, metric.value].filter(Boolean).join(" "))
     .filter(Boolean);
   if (roi && !metrics.some((metric) => /ROI/i.test(metric))) metrics.push(roi);
-  return compactNodeText(metrics.join(" | ") || spec.subtitle || "核心总结", 64, roi ? [roi] : []);
+  return compactNodeText(metrics.join(" | ") || spec.subtitle || "核心总结", 52, roi ? [roi] : []);
 }
 
 function buildCoverTitle(spec: MindMapSpec) {
   const sourceText = collectSpecText(spec);
   const roi = extractRoi(sourceText);
   const headline = spec.summary.headline || spec.title;
-  const compactHeadline = compactNodeText(headline, 30, roi ? [roi] : []);
-  return compactHeadline.replace(/[，,。；;]\s*$/g, "");
+  return compactNodeText(headline, 18, roi ? [roi] : []);
 }
 
 function buildCoverDetail(spec: MindMapSpec) {
-  const conclusion = compactNodeText(spec.summary.conclusion || spec.subtitle, 48);
+  const conclusion = compactNodeText(spec.summary.conclusion || spec.subtitle, 32);
   return conclusion === spec.summary.headline ? "" : conclusion;
 }
 
@@ -441,13 +565,15 @@ function extractRoi(value: string) {
 function compactNodeText(value: unknown, maxLength: number, protectedTerms: string[] = []) {
   const normalized = String(value || "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/[.…]+/g, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/[，,。；;、:：|｜\s]+$/g, "");
   if (normalized.length <= maxLength) return normalized;
   const protectedTerm = protectedTerms.find((term) => term && normalized.includes(term));
   if (protectedTerm && !normalized.slice(0, maxLength).includes(protectedTerm)) {
-    const headLength = Math.max(0, maxLength - protectedTerm.length - 2);
-    return `${normalized.slice(0, headLength).trim()}…${protectedTerm}`;
+    const headLength = Math.max(0, maxLength - protectedTerm.length - 1);
+    return `${normalized.slice(0, headLength).trim()} ${protectedTerm}`.trim().replace(/[，,。；;、:：|｜\s]+$/g, "");
   }
-  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+  return normalized.slice(0, maxLength).trim().replace(/[，,。；;、:：|｜\s]+$/g, "");
 }
