@@ -1,6 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { supabaseAddCredits, supabaseConsumeCredits, supabaseFindUserBySession, supabaseGetUserById, supabaseLogin, supabaseLogout, useSupabaseStore } from "./supabaseStore";
+import { supabaseAddCredits, supabaseConsumeCredits, supabaseFindUserBySession, supabaseGetUserById, supabaseListCreditPayments, supabaseLogin, supabaseLogout, useSupabaseStore, type CreditPaymentRecord } from "./supabaseStore";
 import { sendLoginCodeEmail } from "./email";
 
 export type UserAccount = {
@@ -193,6 +193,33 @@ export async function addCredits(userId: string, amount: number, source: string,
     "INSERT INTO credit_payments (id, user_id, amount, source, reference_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
   ).run(randomUUID(), userId, Math.round(amount), source, referenceId, now);
   db.prepare("UPDATE users SET credits_total = credits_total + ? WHERE id = ?").run(Math.round(amount), userId);
+}
+
+export async function listCreditPayments(userId: string): Promise<CreditPaymentRecord[]> {
+  if (useSupabaseStore()) {
+    return supabaseListCreditPayments(userId);
+  }
+
+  const { getDb } = await import("./db");
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT id, amount, source, reference_id, created_at
+      FROM credit_payments
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `,
+    )
+    .all(userId) as Array<{ id: string; amount: number; source: string; reference_id: string; created_at: string }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    amount: row.amount,
+    source: row.source,
+    referenceId: row.reference_id,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function getUserById(userId: string) {

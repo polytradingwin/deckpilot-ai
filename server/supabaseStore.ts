@@ -16,6 +16,14 @@ type SupabaseMindMapGenerationRecord = MindMapGenerationRecord & {
   storedFilename: string;
 };
 
+export type CreditPaymentRecord = {
+  id: string;
+  amount: number;
+  source: string;
+  referenceId: string;
+  createdAt: string;
+};
+
 export function useSupabaseStore() {
   return process.env.DATA_STORE === "supabase";
 }
@@ -39,6 +47,11 @@ export async function supabaseConsumeCredits(userId: string, amount: number) {
 
 export async function supabaseAddCredits(userId: string, amount: number, source: string, referenceId: string) {
   await callSupabaseAddCredits<{ ok: boolean }>({ userId, amount, source, referenceId });
+}
+
+export async function supabaseListCreditPayments(userId: string) {
+  const result = await callSupabaseAddCredits<{ payments: CreditPaymentRecord[] }>({ action: "list", userId });
+  return result.payments || [];
 }
 
 export async function supabaseGetUserById(userId: string) {

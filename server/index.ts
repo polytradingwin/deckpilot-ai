@@ -3,7 +3,7 @@ import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { consumeCredits, getCreditCost, getUserById, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
+import { consumeCredits, getCreditCost, getUserById, listCreditPayments, logout, requireUser, findUserBySession, requestLoginCode, verifyLoginCode } from "./auth";
 import { createCanvaAuthorizationUrl, getCanvaRuntimeStatus, handleCanvaOAuthCallback } from "./canva";
 import { createSignedPptxUpload } from "./fileStorage";
 import { generateAndSaveDeck, safeAsciiFilename } from "./generateTask";
@@ -130,6 +130,18 @@ app.get("/api/billing/checkout-status", async (req, res) => {
     res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to verify Stripe checkout.";
+    console.error(error);
+    res.status(400).json({ error: message });
+  }
+});
+
+app.get("/api/billing/payments", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    res.json({ payments: await listCreditPayments(user.id) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load payment records.";
     console.error(error);
     res.status(400).json({ error: message });
   }

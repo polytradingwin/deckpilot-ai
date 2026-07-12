@@ -63,6 +63,14 @@ type UserAccount = {
   creditsRemaining: number;
 };
 
+type CreditPaymentRecord = {
+  id: string;
+  amount: number;
+  source: string;
+  referenceId: string;
+  createdAt: string;
+};
+
 type UiLanguage = "zh" | "en";
 
 const signedUploadLimitBytes = 50 * 1024 * 1024;
@@ -293,6 +301,10 @@ const localizedContent = {
       close: "关闭",
       email: "邮箱",
       creditBalance: "Credit 余额",
+      paymentHistory: "充值记录",
+      paymentHistoryEmpty: "暂无充值记录",
+      paymentAdded: "已到账",
+      paymentReference: "Stripe 付款编号",
       subscription: "计费方式",
       payAsYouGo: "按次付费",
       upgradeCopy: "升级包月后，你将获得更高额度和后续专属模板能力。",
@@ -555,6 +567,10 @@ const localizedContent = {
       close: "Close",
       email: "Email",
       creditBalance: "Credit balance",
+      paymentHistory: "Payment history",
+      paymentHistoryEmpty: "No payment records yet",
+      paymentAdded: "Added",
+      paymentReference: "Stripe payment ID",
       subscription: "Billing",
       payAsYouGo: "Pay as you go",
       upgradeCopy: "Upgrade to monthly for higher credits and dedicated template capabilities later.",
@@ -820,6 +836,23 @@ function apiFetch(path: string, init: RequestInit = {}) {
   });
 }
 
+function formatPaymentTime(value: string, language: UiLanguage) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function shortReference(value: string) {
+  if (value.length <= 14) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
 async function generationApiFetch(init: RequestInit) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -872,6 +905,9 @@ function App() {
   const [legalPage, setLegalPage] = useState<PolicyPage | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [creditPayments, setCreditPayments] = useState<CreditPaymentRecord[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState("");
   const [checkoutPlan, setCheckoutPlan] = useState("");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const codeInputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -978,12 +1014,19 @@ function App() {
         if (!response.ok) throw new Error(payload.error || billingText.failed);
         if (payload.user) setUser(payload.user);
         await refreshSession();
+        await loadCreditPayments();
         setCheckoutMessage(billingText.success);
       } catch (error) {
         setCheckoutMessage(error instanceof Error ? error.message : billingText.failed);
       }
     })();
   }, [billingText.cancelled, billingText.failed, billingText.success]);
+
+  useEffect(() => {
+    if (accountOpen && user) {
+      void loadCreditPayments();
+    }
+  }, [accountOpen, user?.id]);
 
   useEffect(() => {
     setAudience((current) => {
@@ -1035,6 +1078,21 @@ function App() {
       setUser(null);
       setRecentGenerations([]);
       setRecentMindMaps([]);
+    }
+  };
+
+  const loadCreditPayments = async () => {
+    setPaymentsLoading(true);
+    setPaymentsError("");
+    try {
+      const response = await apiFetch("/api/billing/payments");
+      const payload = (await response.json().catch(() => ({}))) as { payments?: CreditPaymentRecord[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Failed to load payment records.");
+      setCreditPayments(payload.payments || []);
+    } catch (error) {
+      setPaymentsError(error instanceof Error ? error.message : "Failed to load payment records.");
+    } finally {
+      setPaymentsLoading(false);
     }
   };
 
@@ -1949,6 +2007,31 @@ function App() {
                 <strong>{ui.payAsYouGo}</strong>
               </div>
             </div>
+            <section className="payment-history">
+              <div className="payment-history-head">
+                <h3>{ui.paymentHistory}</h3>
+                {paymentsLoading && <span>{ui.processing}</span>}
+              </div>
+              {paymentsError && <p className="payment-history-empty">{paymentsError}</p>}
+              {!paymentsError && !paymentsLoading && creditPayments.length === 0 && (
+                <p className="payment-history-empty">{ui.paymentHistoryEmpty}</p>
+              )}
+              {!paymentsError && creditPayments.length > 0 && (
+                <div className="payment-history-list">
+                  {creditPayments.map((payment) => (
+                    <article className="payment-record" key={payment.id}>
+                      <div>
+                        <strong>+{payment.amount} credits</strong>
+                        <span>{formatPaymentTime(payment.createdAt, uiLanguage)}</span>
+                      </div>
+                      <small>
+                        {ui.paymentAdded} · {ui.paymentReference}: {shortReference(payment.referenceId)}
+                      </small>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
             <div className="upgrade-card">
               <p>{ui.upgradeCopy}</p>
               <button

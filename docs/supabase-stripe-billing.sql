@@ -17,12 +17,14 @@ set search_path to 'public', 'extensions', 'pg_temp'
 as $function$
 declare
   is_authorized boolean;
+  action_value text;
   user_id_value uuid;
   amount_value integer;
   source_value text;
   reference_value text;
   inserted_count integer;
   user_json jsonb;
+  payments_json jsonb;
 begin
   select value = encode(extensions.digest(convert_to(coalesce(app_secret, ''), 'utf8'), 'sha256'::text), 'hex')
     into is_authorized
@@ -33,7 +35,34 @@ begin
     raise exception 'unauthorized' using errcode = '28000';
   end if;
 
+  action_value := coalesce(nullif(payload->>'action', ''), 'add');
   user_id_value := (payload->>'userId')::uuid;
+
+  if action_value = 'list' then
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', id,
+          'amount', amount,
+          'source', source,
+          'referenceId', reference_id,
+          'createdAt', created_at
+        )
+        order by created_at desc
+      ),
+      '[]'::jsonb
+    ) into payments_json
+    from (
+      select id, amount, source, reference_id, created_at
+      from public.deckpilot_credit_payments
+      where user_id = user_id_value
+      order by created_at desc
+      limit 50
+    ) payments;
+
+    return jsonb_build_object('ok', true, 'payments', payments_json);
+  end if;
+
   amount_value := greatest(0, coalesce((payload->>'amount')::integer, 0));
   source_value := left(coalesce(nullif(payload->>'source', ''), 'manual'), 80);
   reference_value := left(coalesce(nullif(payload->>'referenceId', ''), encode(extensions.gen_random_bytes(16), 'hex')), 180);
